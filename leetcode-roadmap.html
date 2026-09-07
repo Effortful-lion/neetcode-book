@@ -181,7 +181,16 @@
   .tok-com{color:#8b949e;font-style:italic}
   .tok-op{color:#ff7b72}
   .tok-builtin{color:#ffa657}
+
+  .co-line{font-size:11px;color:var(--muted);font-weight:400;margin-top:2px}
+  .d-examples{margin-top:12px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px}
+  .d-examples h3{font-size:13px;margin-bottom:6px}
+  .d-examples .ex-line{font-size:13px;line-height:1.8;color:var(--text);word-break:break-all}
+  .lang-tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:6px;background:rgba(255,255,255,.1);color:#e8ecf4;margin-bottom:6px;letter-spacing:.5px}
+  .code-block{margin-bottom:16px}
+  .code-block:last-child{margin-bottom:0}
 </style>
+<script src="interview-data.js"></script>
 </head>
 <body>
 <div class="progress-bar" id="progressBar"></div>
@@ -376,15 +385,13 @@
     <h3>解题思路</h3>
     <ol class="d-steps" id="d-steps"></ol>
   </div>
+  <div class="d-examples" id="d-examples" style="display:none">
+    <h3>题目描述 / 示例</h3>
+    <div id="d-examples-body"></div>
+  </div>
   <div class="d-sec">
-    <h3>Go 代码实现</h3>
-    <div class="code-wrap">
-      <div class="code-tools">
-        <button id="editBtn" type="button">编辑</button>
-        <button id="copyBtn" type="button">复制</button>
-      </div>
-      <pre class="code" id="d-code"></pre>
-    </div>
+    <h3 id="d-code-title">Go 代码实现</h3>
+    <div id="d-codes"></div>
   </div>
   <div class="d-sec">
     <h3>性能分析</h3>
@@ -437,6 +444,25 @@ BOOKS['leetcode'] = {
 };
 SECS = BOOKS['leetcode'].secs;
 PROB = BOOKS['leetcode'].prob;
+
+// 第二本书：大厂面经（数据来自外置 interview-data.js，加载失败则跳过）
+if (window.__INTERVIEW_DATA__){
+  (function(){
+    var d = window.__INTERVIEW_DATA__;
+    var nProbs = Object.keys(d.prob).length;
+    BOOKS['interview'] = {
+      title: '大厂面经 · 常见算法题',
+      subtitle: '字节 · 百度 · 阿里 · Momenta 等大厂面试真题 · 按题型分类 · 含面试评估 / 思路分析 / 多语言参考代码 · 来源：飞书《大厂新鲜面经》整理',
+      stats: [
+        {v:String(d.secs.length), k:'题型分类'},
+        {v:String(nProbs), k:'面试真题'},
+        {v:'Java/Py/C++', k:'多语言代码'}
+      ],
+      secs: d.secs,
+      prob: d.prob
+    };
+  })();
+}
 
 function curBook(){ return BOOKS[CUR_BOOK]; }
 function renderHeader(){
@@ -507,8 +533,8 @@ function renderList(){
       var dotCls = st.status ? 'st-dot '+st.status : 'st-dot';
       html += '<tr onclick="goProb(\''+id+'\', this)">';
       html += '<td><span class="'+diffCls(p.d)+'">'+diffName(p.d)+'</span></td>';
-      html += '<td><span class="'+dotCls+'"></span><b>'+id+'. '+esc(p.title)+'</b></td>';
-      html += '<td class="idea">'+p.oneline+'</td>';
+      html += '<td><span class="'+dotCls+'"></span><b>'+id+'. '+esc(p.title)+'</b>'+(p.companies?'<div class="co-line">'+esc(p.companies)+'</div>':'')+'</td>';
+      html += '<td class="idea">'+(p.oneline||'')+'</td>';
       html += '</tr>';
     });
     html += '</tbody></table>';
@@ -615,8 +641,8 @@ function router(){
     IDX = buildIndex();
   }
   var path = parsed.path;
-  var m = path.match(/^\/p\/(\d+)/);
-  var sm = path.match(/^\/(s\d+[ab]?)/);
+  var m = path.match(/^\/p\/([a-zA-Z0-9]+)/);
+  var sm = path.match(/^\/([a-zA-Z]*s\d+[ab]?)/);
   var list = document.getElementById('view-list');
   var det = document.getElementById('view-detail');
   var rc = document.getElementById('roadmap-card');
@@ -658,17 +684,39 @@ function router(){
 function showDetail(id){
   var p = PROB[id];
   try{ localStorage.setItem('lc-progress', JSON.stringify({book:CUR_BOOK,id:id,t:Date.now()})); }catch(e){}
-  window.__curCode = p.code;
   document.getElementById('d-title').textContent = id + '. ' + p.title;
-  document.getElementById('d-sub').innerHTML = diffName(p.d) + ' · ' + p.secName + ' · <a href="https://leetcode.cn/problems/' + p.slug + '/" target="_blank">去 LeetCode 做题 →</a>';
+  // 副标题：难度 · 专题 · 公司（面经）· LC 链接（有 slug 才显示）
+  var sub = diffName(p.d) + ' · ' + p.secName;
+  if (p.companies) sub += ' · <span class="co-line" style="display:inline">' + esc(p.companies) + '</span>';
+  if (p.slug || p.lcSlug) sub += ' · <a href="https://leetcode.cn/problems/' + (p.slug || p.lcSlug) + '/" target="_blank">去 LeetCode 做题 →</a>';
+  document.getElementById('d-sub').innerHTML = sub;
+  // 步骤：leetcode 书单用 steps（含 HTML），面经书单用 ideas（纯文本 + **加粗**）
+  var stepsArr = p.steps || p.ideas || [];
+  var isPlain = !p.steps && !!p.ideas;
   var ol = document.getElementById('d-steps');
   ol.innerHTML = '';
-  p.steps.forEach(function(st){
+  ol.style.display = stepsArr.length ? '' : 'none';
+  stepsArr.forEach(function(st){
     var li = document.createElement('li');
-    li.innerHTML = st;
+    if (isPlain){
+      var txt = String(st).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      li.innerHTML = txt.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+    } else {
+      li.innerHTML = st;
+    }
     ol.appendChild(li);
   });
-  renderCode(p.code);
+  // 示例块（面经）
+  var exBox = document.getElementById('d-examples');
+  var exBody = document.getElementById('d-examples-body');
+  if (p.examples && p.examples.length && exBox){
+    exBox.style.display = '';
+    exBody.innerHTML = p.examples.filter(Boolean).map(function(e){
+      return '<div class="ex-line">' + esc(e) + '</div>';
+    }).join('');
+  } else if (exBox){ exBox.style.display = 'none'; }
+  // 代码块：面经多语言 codes 数组，leetcode 单 code
+  renderCodes(p);
   document.getElementById('d-tc').textContent = p.tc;
   document.getElementById('d-sc').textContent = p.sc;
   document.getElementById('d-extra').textContent = p.extra || '';
@@ -684,24 +732,42 @@ function showDetail(id){
   // 上下题导航
   renderPager(id);
 
-  // 重置编辑按钮态
-  var editBtn = document.getElementById('editBtn');
-  if (editBtn) editBtn.textContent = '编辑';
-  var pre = document.getElementById('d-code');
-  if (pre) pre.removeAttribute('contenteditable');
-
   window.scrollTo(0,0);
 }
 
-// 渲染带行号 + 高亮的代码
-function renderCode(code){
-  var pre = document.getElementById('d-code'); if (!pre) return;
+// 渲染详情页代码区（支持多语言多块）
+function renderCodes(p){
+  var box = document.getElementById('d-codes'); if (!box) return;
+  var title = document.getElementById('d-code-title');
+  var blocks = p.codes && p.codes.length ? p.codes : [{ lang: 'go', code: p.code || '' }];
+  if (title) title.textContent = blocks.length > 1 ? '参考代码（Java / Python / C++）' : 'Go 代码实现';
+  window.__codes = blocks.map(function(b){ return b.code; });
+  box.innerHTML = blocks.map(function(b, i){
+    var langName = { 'java':'Java', 'python':'Python', 'c++':'C++', 'go':'Go', 'golang':'Go', 'javascript':'JavaScript', 'js':'JavaScript' }[b.lang] || b.lang || 'Code';
+    return '<div class="code-block">'
+      + '<span class="lang-tag">' + esc(langName) + '</span>'
+      + '<div class="code-wrap">'
+      + '<div class="code-tools">'
+      + '<button type="button" data-act="edit" data-idx="' + i + '">编辑</button>'
+      + '<button type="button" data-act="copy" data-idx="' + i + '">复制</button>'
+      + '</div>'
+      + '<pre class="code" data-idx="' + i + '"></pre>'
+      + '</div></div>';
+  }).join('');
+  blocks.forEach(function(b, i){
+    var pre = box.querySelector('pre[data-idx="' + i + '"]');
+    if (pre) renderCodeInto(pre, b.code, b.lang);
+  });
+}
+
+// 渲染单个 pre：行号 + 按语言分派高亮
+function renderCodeInto(pre, code, lang){
+  var hl = lang === 'python' ? highlightPy : (lang === 'java' || lang === 'c++') ? highlightC : highlightGo;
   var lines = code.split('\n');
-  var gutterHtml = '';
-  var contentHtml = '';
+  var gutterHtml = '', contentHtml = '';
   for (var i = 0; i < lines.length; i++){
     gutterHtml += '<span class="ln">'+(i+1)+'</span>';
-    contentHtml += '<span class="ln">'+highlightGo(lines[i])+'</span>';
+    contentHtml += '<span class="ln">'+hl(lines[i])+'</span>';
   }
   pre.innerHTML = '<span class="code-gutter">'+gutterHtml+'</span><span class="code-content">'+contentHtml+'</span>';
 }
@@ -775,6 +841,108 @@ function highlightGo(line){
       out += '<span class="tok-op">'+esc1(c)+'</span>';
       i++; continue;
     }
+    out += esc1(c);
+    i++;
+  }
+  return out;
+}
+
+// Java / C++ 高亮（C 系通用，关键字并集）
+var C_KW = {'public':1,'private':1,'protected':1,'static':1,'final':1,'void':1,'class':1,'interface':1,'extends':1,'implements':1,'new':1,'return':1,'if':1,'else':1,'for':1,'while':1,'do':1,'switch':1,'case':1,'break':1,'continue':1,'try':1,'catch':1,'finally':1,'throw':1,'throws':1,'import':1,'package':1,'this':1,'super':1,'abstract':1,'synchronized':1,'volatile':1,'transient':1,'instanceof':1,'enum':1,'default':1,'assert':1,'native':1,'strictfp':1,'template':1,'typename':1,'namespace':1,'using':1,'operator':1,'delete':1,'friend':1,'inline':1,'virtual':1,'override':1,'const':1,'constexpr':1,'struct':1,'sizeof':1};
+var C_TYPES = {'int':1,'long':1,'short':1,'byte':1,'char':1,'boolean':1,'float':1,'double':1,'String':1,'Integer':1,'Long':1,'Double':1,'Float':1,'Boolean':1,'Character':1,'List':1,'ArrayList':1,'Map':1,'HashMap':1,'HashSet':1,'TreeMap':1,'TreeSet':1,'LinkedHashMap':1,'LinkedHashSet':1,'Queue':1,'LinkedList':1,'Deque':1,'ArrayDeque':1,'PriorityQueue':1,'Stack':1,'Set':1,'Collections':1,'Arrays':1,'Objects':1,'Optional':1,'TreeNode':1,'ListNode':1,'Node':1,'Entry':1,'vector':1,'vector<int>':1,'unordered_map':1,'unordered_set':1,'map':1,'set':1,'pair':1,'string':1,'size_t':1,'auto':1,'TreeNode*':1,'ListNode*':1,'std':1,'true':1,'false':1,'null':1,'nullptr':1,'NULL':1};
+var C_BUILTIN = {'println':1,'printf':1,'print':1,'len':1,'make':1,'append':1,'copy':1,'size':1,'push_back':1,'emplace_back':1,'find':1,'insert':1,'erase':1,'count':1,'sort':1,'max':1,'min':1,'abs':1,'swap':1,'get':1,'add':1,'remove':1,'contains':1,'put':1,'isEmpty':1,'size':1,'charAt':1,'substring':1,'length':1,'push':1,'pop':1,'front':1,'back':1,'begin':1,'end':1};
+
+function highlightC(line){
+  if (line === '') return '&nbsp;';
+  var out = '', i = 0, n = line.length;
+  function esc1(c){ return c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '&' ? '&amp;' : c; }
+  // 预处理指令整行着色
+  if (/^\s*#/.test(line)) return '<span class="tok-builtin">'+esc(line)+'</span>';
+  while (i < n){
+    var c = line[i];
+    if (c === '/' && i+1 < n && line[i+1] === '/'){ out += '<span class="tok-com">'+esc(line.slice(i))+'</span>'; break; }
+    if (c === '"'){
+      var j = i+1;
+      while (j < n && line[j] !== '"'){ if (line[j] === '\\' && j+1 < n) j += 2; else j++; }
+      out += '<span class="tok-str">'+esc(line.slice(i, Math.min(j+1, n)))+'</span>';
+      i = j+1; continue;
+    }
+    if (c === "'"){
+      var j = i+1;
+      while (j < n && line[j] !== "'"){ if (line[j] === '\\' && j+1 < n) j += 2; else j++; }
+      out += '<span class="tok-str">'+esc(line.slice(i, Math.min(j+1, n)))+'</span>';
+      i = j+1; continue;
+    }
+    if (c >= '0' && c <= '9'){
+      var j = i;
+      while (j < n && /[0-9._a-fxLlUu]/.test(line[j])) j++;
+      out += '<span class="tok-num">'+esc(line.slice(i, j))+'</span>';
+      i = j; continue;
+    }
+    if (/[a-zA-Z_]/.test(c)){
+      var j = i;
+      while (j < n && /[a-zA-Z0-9_]/.test(line[j])) j++;
+      var word = line.slice(i, j);
+      var afterIdx = j;
+      while (afterIdx < n && line[afterIdx] === ' ') afterIdx++;
+      if (C_KW[word]) out += '<span class="tok-kw">'+esc(word)+'</span>';
+      else if (C_TYPES[word]) out += '<span class="tok-type">'+esc(word)+'</span>';
+      else if (C_BUILTIN[word]) out += '<span class="tok-builtin">'+esc(word)+'</span>';
+      else if (afterIdx < n && line[afterIdx] === '(') out += '<span class="tok-fn">'+esc(word)+'</span>';
+      else out += esc(word);
+      i = j; continue;
+    }
+    if ('+-*/%=<>!&|^~?:;,.(){}[]'.indexOf(c) >= 0){ out += '<span class="tok-op">'+esc1(c)+'</span>'; i++; continue; }
+    out += esc1(c);
+    i++;
+  }
+  return out;
+}
+
+// Python 高亮
+var PY_KW = {'def':1,'class':1,'return':1,'if':1,'elif':1,'else':1,'for':1,'while':1,'in':1,'not':1,'and':1,'or':1,'is':1,'import':1,'from':1,'as':1,'with':1,'try':1,'except':1,'finally':1,'raise':1,'lambda':1,'pass':1,'break':1,'continue':1,'global':1,'nonlocal':1,'yield':1,'del':1,'assert':1,'async':1,'await':1};
+var PY_CONST = {'None':1,'True':1,'False':1,'self':1,'cls':1};
+var PY_BUILTIN = {'print':1,'len':1,'range':1,'set':1,'dict':1,'list':1,'tuple':1,'int':1,'str':1,'float':1,'bool':1,'sum':1,'min':1,'max':1,'abs':1,'sorted':1,'reversed':1,'enumerate':1,'zip':1,'map':1,'filter':1,'append':1,'add':1,'pop':1,'get':1,'keys':1,'values':1,'items':1,'update':1,'remove':1,'sort':1,'join':1,'split':1,'strip':1,'replace':1};
+
+function highlightPy(line){
+  if (line === '') return '&nbsp;';
+  var out = '', i = 0, n = line.length;
+  function esc1(c){ return c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '&' ? '&amp;' : c; }
+  while (i < n){
+    var c = line[i];
+    if (c === '#'){ out += '<span class="tok-com">'+esc(line.slice(i))+'</span>'; break; }
+    if (c === '"' || c === "'"){
+      // 三引号或普通字符串，扫到闭合或行尾
+      var tri = line.substr(i, 3) === '"""' || line.substr(i, 3) === "'''";
+      var q = tri ? line.substr(i, 3) : c;
+      var j = i + q.length;
+      while (j < n && line.substr(j, q.length) !== q){
+        if (line[j] === '\\' && j+1 < n) j += 2; else j++;
+      }
+      var end = Math.min(j + q.length, n);
+      out += '<span class="tok-str">'+esc(line.slice(i, end))+'</span>';
+      i = end; continue;
+    }
+    if (c >= '0' && c <= '9'){
+      var j = i;
+      while (j < n && /[0-9._a-fxXbBoO]/.test(line[j])) j++;
+      out += '<span class="tok-num">'+esc(line.slice(i, j))+'</span>';
+      i = j; continue;
+    }
+    if (/[a-zA-Z_]/.test(c)){
+      var j = i;
+      while (j < n && /[a-zA-Z0-9_]/.test(line[j])) j++;
+      var word = line.slice(i, j);
+      var afterIdx = j;
+      while (afterIdx < n && line[afterIdx] === ' ') afterIdx++;
+      if (PY_KW[word]) out += '<span class="tok-kw">'+esc(word)+'</span>';
+      else if (PY_CONST[word]) out += '<span class="tok-type">'+esc(word)+'</span>';
+      else if (PY_BUILTIN[word]) out += '<span class="tok-builtin">'+esc(word)+'</span>';
+      else if (afterIdx < n && line[afterIdx] === '(') out += '<span class="tok-fn">'+esc(word)+'</span>';
+      else out += esc(word);
+      i = j; continue;
+    }
+    if ('+-*/%=<>!&|^~?:;,.(){}[]@'.indexOf(c) >= 0){ out += '<span class="tok-op">'+esc1(c)+'</span>'; i++; continue; }
     out += esc1(c);
     i++;
   }
@@ -4003,8 +4171,8 @@ function gramsOf(s){var a=[];if(s.length<3){a.push(s);return a;}a.push(s);for(va
 function tokenize(q){var n=normalize(q);if(!n)return[];var ps=n.split(/\s+/).filter(Boolean);var all=[];ps.forEach(function(p){all=all.concat(gramsOf(p));});return all;}
 function countHits(h,n){if(!n)return 0;var c=0,i=0;while((i=h.indexOf(n,i))>=0){c++;i+=n.length;}return c;}
 function sliceAround(t,q,len){if(!q)return t.slice(0,len);var n=t.toLowerCase();var c=q.toLowerCase().split(/\s+/).filter(Boolean);var b=-1;for(var i=0;i<c.length;i++){var p=n.indexOf(c[i]);if(p>=0&&(b<0||p<b))b=p;}if(b<0)return t.slice(0,len);var s=Math.max(0,b-8);return(s>0?'…':'')+t.slice(s,s+len);}
-function buildIndex(){var idx=[];for(var id in PROB){var p=PROB[id];var t=p.title||'';var o=p.oneline||'';var s=p.secName||'';var st=stripTag(p.steps.join(' '));var e=p.extra||'';var f=(t+' '+o+' '+s+' '+st+' '+e).toLowerCase();idx.push({id:id,title:t,d:p.d,sec:s,oneline:o,doc:f,titleLc:t.toLowerCase(),onelineLc:o.toLowerCase()});}return idx;}
-function search(q){q=(q||'').trim();if(!q)return[];var norm=normalize(q);var exp=aliasExpand(q);var whole=norm;var toks=tokenize(q);var exT=exp?exp.split(/\s+/).filter(Boolean):[];var res=[];IDX.forEach(function(it){var sc=0;var wF=countHits(it.doc,whole);if(wF>0)sc+=30*wF;var wT=countHits(it.titleLc,whole);if(wT>0)sc+=60*wT;var wO=countHits(it.onelineLc,whole);if(wO>0)sc+=40*wO;toks.forEach(function(tk){var w=tk.length>=3?1.6:(tk.length===2?1.2:0.6);var iT=countHits(it.titleLc,tk);if(iT>0)sc+=8*iT*w;var iO=countHits(it.onelineLc,tk);if(iO>0)sc+=4*iO*w;var iD=countHits(it.doc,tk);if(iD>0)sc+=0.5*iD;});exT.forEach(function(tk){var c=countHits(it.doc,tk);if(c>0)sc+=2;});if(sc>0)res.push({id:it.id,title:it.title,d:it.d,sec:it.sec,oneline:it.oneline,score:sc,snip:sliceAround(it.oneline||stripTag(it.doc),q,50)});});res.sort(function(a,b){if(b.score!==a.score)return b.score-a.score;return parseInt(a.id,10)-parseInt(b.id,10);});return res.slice(0,30);}
+function buildIndex(){var idx=[];for(var id in PROB){var p=PROB[id];var t=p.title||'';var o=p.oneline||'';var s=p.secName||'';var st=stripTag((p.steps||p.ideas||[]).join(' '));var ex=(p.examples||[]).join(' ');var co=p.companies||'';var e=p.extra||'';var f=(t+' '+o+' '+s+' '+st+' '+ex+' '+co+' '+e).toLowerCase();idx.push({id:id,title:t,d:p.d,sec:s,oneline:o,doc:f,titleLc:t.toLowerCase(),onelineLc:o.toLowerCase()});}return idx;}
+function search(q){q=(q||'').trim();if(!q)return[];var norm=normalize(q);var exp=aliasExpand(q);var whole=norm;var toks=tokenize(q);var exT=exp?exp.split(/\s+/).filter(Boolean):[];var res=[];IDX.forEach(function(it){var sc=0;var wF=countHits(it.doc,whole);if(wF>0)sc+=30*wF;var wT=countHits(it.titleLc,whole);if(wT>0)sc+=60*wT;var wO=countHits(it.onelineLc,whole);if(wO>0)sc+=40*wO;toks.forEach(function(tk){var w=tk.length>=3?1.6:(tk.length===2?1.2:0.6);var iT=countHits(it.titleLc,tk);if(iT>0)sc+=8*iT*w;var iO=countHits(it.onelineLc,tk);if(iO>0)sc+=4*iO*w;var iD=countHits(it.doc,tk);if(iD>0)sc+=0.5*iD;});exT.forEach(function(tk){var c=countHits(it.doc,tk);if(c>0)sc+=2;});if(sc>0)res.push({id:it.id,title:it.title,d:it.d,sec:it.sec,oneline:it.oneline,score:sc,snip:sliceAround(it.oneline||stripTag(it.doc),q,50)});});res.sort(function(a,b){if(b.score!==a.score)return b.score-a.score;var na=parseInt(a.id,10),nb=parseInt(b.id,10);if(!isNaN(na)&&!isNaN(nb))return na-nb;return a.id<b.id?-1:1;});return res.slice(0,30);}
 function hl(t,q){var o=esc(t);var qs=(q||'').toLowerCase().split(/\s+/).filter(Boolean);qs.forEach(function(k){if(!k)return;var re=new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi');o=o.replace(re,function(m){return '<mark>'+m+'</mark>';});});return o;}
 var SUG_CUR=-1,SUG_ITEMS=[];
 function renderSuggest(q){var box=document.getElementById('suggest');if(!q){box.classList.remove('on');box.innerHTML='';SUG_ITEMS=[];SUG_CUR=-1;return;}var res=search(q);SUG_ITEMS=res;SUG_CUR=-1;if(!res.length){box.innerHTML='<div class="s-item" style="color:var(--muted);cursor:default">无匹配结果</div>';box.classList.add('on');return;}var html='';res.forEach(function(r,i){var dn=diffName(r.d),dc=diffCls(r.d);html+='<div class="s-item" data-i="'+i+'" data-id="'+r.id+'"><div class="s-t"><span class="'+dc+'">'+dn+'</span> '+r.id+'. '+hl(r.title,q)+'</div><div class="s-d">'+esc(r.sec)+' · '+hl(r.snip,q)+'</div></div>';});box.innerHTML=html;box.classList.add('on');Array.prototype.forEach.call(box.querySelectorAll('.s-item[data-id]'),function(el){el.addEventListener('click',function(){var id=el.getAttribute('data-id');document.getElementById('q').value='';renderSuggest('');if(id)goProb(id);});});}
@@ -4012,28 +4180,47 @@ function sugMove(d){if(!SUG_ITEMS.length)return;SUG_CUR=(SUG_CUR+d+SUG_ITEMS.len
 function initSearch(){IDX=buildIndex();var q=document.getElementById('q');var t;q.addEventListener('input',function(){clearTimeout(t);t=setTimeout(function(){renderSuggest(q.value);},80);});q.addEventListener('keydown',function(e){if(e.key==='ArrowDown'){e.preventDefault();sugMove(1);}else if(e.key==='ArrowUp'){e.preventDefault();sugMove(-1);}else if(e.key==='Enter'){e.preventDefault();var pick=SUG_CUR>=0?SUG_ITEMS[SUG_CUR]:SUG_ITEMS[0];if(pick){q.value='';renderSuggest('');goProb(pick.id);}}else if(e.key==='Escape'){renderSuggest('');q.blur();}});document.addEventListener('click',function(e){if(!e.target.closest('.search-box'))renderSuggest('');});}
 function initTheme(){var saved=localStorage.getItem('lc-theme');if(saved)document.body.setAttribute('data-theme',saved);var b=document.getElementById('themeBtn');b.textContent=document.body.getAttribute('data-theme')==='dark'?'☀️':'🌙';b.addEventListener('click',function(){var cur=document.body.getAttribute('data-theme')==='dark'?'':'dark';if(cur)document.body.setAttribute('data-theme',cur);else document.body.removeAttribute('data-theme');localStorage.setItem('lc-theme',cur);b.textContent=cur==='dark'?'☀️':'🌙';});}
 function initProgress(){var bar=document.getElementById('resumeBar');var raw=localStorage.getItem('lc-progress');if(!raw)return;try{var o=JSON.parse(raw);var book=o.book||'leetcode';if(book!==CUR_BOOK)return;var p=PROB[o.id];if(!p)return;bar.innerHTML='<span>上次读到：<a href="#/book/'+book+'/p/'+o.id+'">'+o.id+'. '+esc(p.title)+'</a> · '+diffName(p.d)+' · '+esc(p.secName)+' · '+new Date(o.t).toLocaleString()+'</span><span class="resume-close" id="resumeClose">×</span>';bar.classList.add('on');document.getElementById('resumeClose').addEventListener('click',function(){localStorage.removeItem('lc-progress');bar.classList.remove('on');});}catch(e){}}
-function initCopy(){var btn=document.getElementById('copyBtn');if(!btn)return;btn.addEventListener('click',function(){var code=window.__curCode||document.getElementById('d-code').textContent;if(navigator.clipboard){navigator.clipboard.writeText(code).catch(function(){});}else{var ta=document.createElement('textarea');ta.value=code;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);}var old=btn.textContent;btn.textContent='已复制 ✓';btn.classList.add('ok');setTimeout(function(){btn.textContent=old;btn.classList.remove('ok');},1500);});}
+function copyText(code, btn){
+  if(navigator.clipboard){navigator.clipboard.writeText(code).catch(function(){});}
+  else{var ta=document.createElement('textarea');ta.value=code;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);}
+  var old=btn.textContent;btn.textContent='已复制 ✓';btn.classList.add('ok');
+  setTimeout(function(){btn.textContent=old;btn.classList.remove('ok');},1500);
+}
+function initCopy(){
+  var box=document.getElementById('d-codes');if(!box)return;
+  box.addEventListener('click',function(ev){
+    var btn=ev.target.closest('button[data-act="copy"]');if(!btn)return;
+    var idx=+btn.getAttribute('data-idx');
+    var code=(window.__codes||[])[idx];
+    if(code===undefined){var pre=box.querySelector('pre[data-idx="'+idx+'"]');code=pre?pre.textContent:'';}
+    copyText(code, btn);
+  });
+}
 function initEdit(){
-  var btn=document.getElementById('editBtn');if(!btn)return;
-  btn.addEventListener('click',function(){
-    var pre=document.getElementById('d-code');
+  var box=document.getElementById('d-codes');if(!box)return;
+  box.addEventListener('click',function(ev){
+    var btn=ev.target.closest('button[data-act="edit"]');if(!btn)return;
+    var idx=btn.getAttribute('data-idx');
+    var pre=box.querySelector('pre[data-idx="'+idx+'"]');
     if(!pre)return;
     var editing=pre.getAttribute('contenteditable')==='true';
     if(editing){
-      // 退出编辑：重新渲染高亮（用户修改的内容保留为纯文本）
-      var newText=pre.innerText.replace(/\n/g,'\n');
-      window.__curCode=newText;
-      renderCode(newText);
+      var newText=pre.innerText;
+      if(window.__codes)window.__codes[+idx]=newText;
+      renderCodeInto(pre, newText, (PROB[curProbId()]&&PROB[curProbId()].codes&&PROB[curProbId()].codes[+idx])?PROB[curProbId()].codes[+idx].lang:'go');
       pre.removeAttribute('contenteditable');
       btn.textContent='编辑';
     }else{
-      // 进入编辑：转纯文本
-      pre.textContent=window.__curCode||'';
+      pre.textContent=(window.__codes||[])[+idx]||'';
       pre.setAttribute('contenteditable','true');
       pre.focus();
       btn.textContent='完成';
     }
   });
+}
+function curProbId(){
+  var m=parseHash().path.match(/^\/p\/([a-zA-Z0-9]+)/);
+  return m?m[1]:'';
 }
 function initBookSelect(){
   var sel=document.getElementById('bookSelect');if(!sel)return;
@@ -4063,7 +4250,7 @@ function initStates(){
   var hint=document.getElementById('noteHint');
   if(stSel){
     stSel.addEventListener('change',function(){
-      var id=parseHash().path.match(/^\/p\/(\d+)/);
+      var id=parseHash().path.match(/^\/p\/([a-zA-Z0-9]+)/);
       if(id) saveProblemState(id[1], stSel.value, undefined);
       renderList();
     });
@@ -4072,7 +4259,7 @@ function initStates(){
     var t;
     noteArea.addEventListener('input',function(){
       clearTimeout(t);
-      var id=parseHash().path.match(/^\/p\/(\d+)/);
+      var id=parseHash().path.match(/^\/p\/([a-zA-Z0-9]+)/);
       t=setTimeout(function(){
         if(id) saveProblemState(id[1], undefined, noteArea.value);
         if(hint) hint.textContent='已保存 ✓';
