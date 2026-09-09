@@ -83,7 +83,7 @@ function parseNeetcode(raw) {
       const m = /^([0-9a-zA-Z]+)\.\s*(.+)$/.exec(h2[1].trim());
       const id = m ? m[1] : h2[1].trim();
       const title = m ? m[2].trim() : h2[1].trim();
-      curProb = { title, slug: '', d: 'm', secName: curSec.secName || curSec.name, oneline: '', steps: [], code: '', tc: '', sc: '', extra: '' };
+      curProb = { title, slug: '', d: 'm', secName: curSec.secName || curSec.name, oneline: '', steps: [], code: '', tc: '', sc: '', extra: '', description: [] };
       prob[id] = curProb;
       curSec.probs.push(id);
       mode = '';
@@ -132,6 +132,12 @@ function parseNeetcode(raw) {
     // 无序列表（sec 头部）→ notes
     if (/^-/.test(t) && curSec && !curProb) {
       curSec.notes.push(t.replace(/^-\s+/, ''));
+      continue;
+    }
+
+    // 处理普通段落内容，当curProb存在时添加到description
+    if (curProb) {
+      curProb.description.push(t);
       continue;
     }
   }

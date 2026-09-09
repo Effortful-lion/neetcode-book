@@ -434,6 +434,10 @@
     <h3>题目描述 / 示例</h3>
     <div id="d-examples-body"></div>
   </div>
+  <div class="d-sec" id="d-description" style="display:none">
+    <h3>详细描述</h3>
+    <div id="d-description-body"></div>
+  </div>
   <div class="d-sec">
     <h3 id="d-code-title">Go 代码实现</h3>
     <div id="d-codes"></div>
@@ -977,6 +981,15 @@ function showDetail(id){
       return '<div class="ex-line">' + esc(e) + '</div>';
     }).join('');
   } else if (exBox){ exBox.style.display = 'none'; }
+  // 详细描述块
+  var descBox = document.getElementById('d-description');
+  var descBody = document.getElementById('d-description-body');
+  if (p.description && p.description.length && descBox){
+    descBox.style.display = '';
+    descBody.innerHTML = p.description.filter(Boolean).map(function(d){
+      return '<div class="desc-line">' + esc(d) + '</div>';
+    }).join('');
+  } else if (descBox){ descBox.style.display = 'none'; }
   // 代码块：面经多语言 codes 数组，leetcode 单 code
   renderCodes(p);
   document.getElementById('d-tc').textContent = p.tc;
@@ -1253,10 +1266,10 @@ function gramsOf(s){var a=[];if(s.length<3){a.push(s);return a;}a.push(s);for(va
 function tokenize(q){var n=normalize(q);if(!n)return[];var ps=n.split(/\s+/).filter(Boolean);var all=[];ps.forEach(function(p){all=all.concat(gramsOf(p));});return all;}
 function countHits(h,n){if(!n)return 0;var c=0,i=0;while((i=h.indexOf(n,i))>=0){c++;i+=n.length;}return c;}
 function sliceAround(t,q,len){if(!q)return t.slice(0,len);var n=t.toLowerCase();var c=q.toLowerCase().split(/\s+/).filter(Boolean);var b=-1;for(var i=0;i<c.length;i++){var p=n.indexOf(c[i]);if(p>=0&&(b<0||p<b))b=p;}if(b<0)return t.slice(0,len);var s=Math.max(0,b-8);return(s>0?'…':'')+t.slice(s,s+len);}
-function buildIndex(){var idx=[];for(var id in PROB){var p=PROB[id];var t=p.title||'';var o=p.oneline||'';var s=p.secName||'';var st=stripTag((p.steps||p.ideas||[]).join(' '));var ex=(p.examples||[]).join(' ');var co=p.companies||'';var e=p.extra||'';var f=(t+' '+o+' '+s+' '+st+' '+ex+' '+co+' '+e).toLowerCase();idx.push({id:id,title:t,d:p.d,sec:s,oneline:o,doc:f,titleLc:t.toLowerCase(),onelineLc:o.toLowerCase()});}return idx;}
+function buildIndex(){var idx=[];for(var id in PROB){var p=PROB[id];var t=p.title||'';var o=p.oneline||'';var s=p.secName||'';var st=stripTag((p.steps||p.ideas||[]).join(' '));var ex=(p.examples||[]).join(' ');var co=p.companies||'';var e=p.extra||'';var desc=p.description?stripTag(p.description.join(' ')):'';var f=(t+' '+o+' '+s+' '+st+' '+ex+' '+co+' '+e+' '+desc).toLowerCase();idx.push({id:id,title:t,d:p.d,sec:s,oneline:o,companies:co,doc:f,titleLc:t.toLowerCase(),onelineLc:o.toLowerCase()});}return idx;}
 function search(q, filters = {}){
   q=(q||'').trim();
-  if(!q && !filters.sec && !filters.d)return[];
+  if(!q && !filters.sec && !filters.d && !filters.company)return[];
 
   var norm=normalize(q);
   var exp=aliasExpand(q);
@@ -1271,18 +1284,23 @@ function search(q, filters = {}){
     // 应用筛选条件
     if(filters.sec && it.sec !== filters.sec) return;
     if(filters.d && it.d !== filters.d) return;
+    if(filters.company && (!it.companies || !it.companies.includes(filters.company))) return;
 
     // 计算得分
     if(q){
       var wF=countHits(it.doc,whole);if(wF>0)sc+=30*wF;
       var wT=countHits(it.titleLc,whole);if(wT>0)sc+=60*wT;
       var wO=countHits(it.onelineLc,whole);if(wO>0)sc+=40*wO;
+      var wC=filters.company ? 100 : (it.companies && countHits(it.companies.toLowerCase(),norm))*50;
+      if(wC>0)sc+=wC;
 
       toks.forEach(function(tk){
         var w=tk.length>=3?1.6:(tk.length===2?1.2:0.6);
         var iT=countHits(it.titleLc,tk);if(iT>0)sc+=8*iT*w;
         var iO=countHits(it.onelineLc,tk);if(iO>0)sc+=4*iO*w;
         var iD=countHits(it.doc,tk);if(iD>0)sc+=0.5*iD;
+        // 公司名搜索权重更高
+        if(it.companies && countHits(it.companies.toLowerCase(),tk)) sc+=10*w;
       });
 
       exT.forEach(function(tk){var c=countHits(it.doc,tk);if(c>0)sc+=2;});
@@ -1293,6 +1311,7 @@ function search(q, filters = {}){
 
     if(sc>0)res.push({
       id:it.id,title:it.title,d:it.d,sec:it.sec,oneline:it.oneline,
+      companies:it.companies,
       score:sc,snip:sliceAround(it.oneline||stripTag(it.doc),q,50)
     });
   });
@@ -1304,41 +1323,54 @@ function hl(t,q){var o=esc(t);var qs=(q||'').toLowerCase().split(/\s+/).filter(B
 var SUG_CUR=-1,SUG_ITEMS=[];
 function renderSuggest(q, customRes = null){
   var box=document.getElementById('suggest');
-  if(!q && !customRes){
-    box.classList.remove('on');
-    box.innerHTML='';
-    SUG_ITEMS=[];
-    SUG_CUR=-1;
-    return;
-  }
-
-  var res = customRes || search(q);
+  var res = customRes || (q ? search(q) : []);
   SUG_ITEMS=res;
   SUG_CUR=-1;
 
   var html='';
 
-  // 添加搜索历史
-  if(q){
+  // 当搜索框为空时，显示搜索历史和快速筛选
+  if(!q){
+    var historyHtml = renderSearchHistory();
+    if(historyHtml) html += historyHtml;
+
+    // 添加快速专题入口
+    if(SECS.length > 0){
+      html += '<div class="s-item s-history">所有专题</div>';
+      SECS.forEach(function(s){
+        html += `<div class="s-item" onclick="location.hash='#/book/${CUR_BOOK}/${s.id}'">
+          <span class="s-t">${esc(s.short || s.name)}</span>
+          <span class="s-d">${s.probs.length} 个知识点</span>
+        </div>`;
+      });
+    }
+  } else {
+    // 添加搜索历史中的相关历史？不，只显示当前搜索的结果
     var historyHtml = renderSearchHistory();
     if(historyHtml) html += historyHtml;
   }
 
-  if(!res.length){
-    html+='<div class="s-item" style="color:var(--muted);cursor:default">无匹配结果</div>';
-  } else {
+  // 处理搜索结果
+  if(res.length > 0){
+    html += '<div class="s-item s-history">搜索结果</div>';
     res.forEach(function(r,i){
       var dn=diffName(r.d),dc=diffCls(r.d);
+      var companyPart = r.companies ? `<span class="co-line">${esc(r.companies)}</span>` : '';
       html+='<div class="s-item" data-i="'+i+'" data-id="'+r.id+'">'
         +'<div class="s-t"><span class="'+dc+'">'+dn+'</span> '+r.id+'. '+hl(r.title,q)+'</div>'
-        +'<div class="s-d">'+esc(r.sec)+' · '+hl(r.snip,q)+'</div>'
+        +'<div class="s-d">'+esc(r.sec)+' · '+(companyPart ? esc(companyPart) + ' · ' : '')+hl(r.snip,q)+'</div>'
         +'</div>';
     });
+  } else if(!q && !historyHtml){
+    html+='<div class="s-item" style="color:var(--muted);cursor:default">无匹配结果</div>';
+  } else if(!res.length && q){
+    html+='<div class="s-item" style="color:var(--muted);cursor:default">未找到匹配结果</div>';
   }
 
   box.innerHTML=html;
   box.classList.add('on');
 
+  // 绑定点击事件
   Array.prototype.forEach.call(box.querySelectorAll('.s-item[data-id]'),function(el){
     el.addEventListener('click',function(){
       var id=el.getAttribute('data-id');
@@ -1347,6 +1379,17 @@ function renderSuggest(q, customRes = null){
         renderSuggest('');
         addSearchHistory(el.querySelector('.s-t').textContent.replace(/\[简单\]\s*/,'').replace(/\[中等\]\s*/,'').replace(/\[困难\]\s*/,''));
         goProb(id);
+      }
+    });
+  });
+
+  // 绑定专题快速入口的点击事件
+  Array.prototype.forEach.call(box.querySelectorAll('.s-item:not([data-id])'),function(el){
+    el.addEventListener('click',function(){
+      var href = el.getAttribute('onclick').match(/location.hash='([^']+)'/)[1];
+      if(href){
+        location.hash = href;
+        renderSuggest('');
       }
     });
   });
@@ -1393,20 +1436,41 @@ function initSearch(){
                 <option value="m">中等</option>
                 <option value="h">困难</option>
             </select>
+            <select id="search-filter-company" class="st-select" style="min-width:120px;">
+                <option value="all">所有公司</option>
+            </select>
         </div>
     `;
+
+    // 填充公司筛选选项
+    var companyFilter = document.getElementById('search-filter-company');
+    var companies = new Set();
+    IDX.forEach(item => {
+      if(item.companies){
+        item.companies.split(' · ').forEach(c => companies.add(c));
+      }
+    });
+    Array.from(companies).sort().forEach(c => {
+      var option = document.createElement('option');
+      option.value = c;
+      option.textContent = c;
+      companyFilter.appendChild(option);
+    });
 
     // 监听筛选变化
     var secFilter = document.getElementById('search-filter-sec');
     var diffFilter = document.getElementById('search-filter-diff');
+    var companyFilter = document.getElementById('search-filter-company');
     function updateSearch() {
         var qVal = q.value;
         var res = search(qVal, {
             sec: secFilter.value !== 'all' ? secFilter.value : null,
-            d: diffFilter.value !== 'all' ? diffFilter.value : null
+            d: diffFilter.value !== 'all' ? diffFilter.value : null,
+            company: companyFilter.value !== 'all' ? companyFilter.value : null
         });
         renderSuggest(qVal, res);
     }
+    companyFilter.addEventListener('change', updateSearch);
     secFilter.addEventListener('change', updateSearch);
     diffFilter.addEventListener('change', updateSearch);
 
