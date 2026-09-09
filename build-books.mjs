@@ -265,7 +265,8 @@ const lc = parseNeetcode(lcRaw);
 lc.book.short = 'LeetCode Roadmap';
 writeData('leetcode-data.js', 'leetcode', lc);
 
-// 面经
+// 面经 (commented out because 大厂面经.md is missing)
+/*
 const ivRaw = readFileSync('大厂面经.md', 'utf8');
 const ivParsed = parseFeishu(ivRaw);
 const nProbs = Object.keys(ivParsed.prob).length;
@@ -284,6 +285,7 @@ const iv = {
   prob: ivParsed.prob
 };
 writeData('interview-data.js', 'interview', iv);
+*/
 
 // 专题算法 - 算法笔记汇总和算法原理汇总
 const algoNotesRaw = readFileSync('docs/算法笔记汇总.md', 'utf8');
@@ -295,18 +297,79 @@ const algoNotes = parseNeetcode(algoNotesRaw);
 const algoPrinciple = parseNeetcode(algoPrincipleRaw);
 
 // 合并两个内容到专题算法书单
+// 给专题算法的所有ID添加前缀"sa-"避免和leetcode书单冲突
+const processedSecs = [];
+const processedProbs = {};
+
+// 处理算法笔记汇总的专题和题目
+algoNotes.secs.forEach((sec, index) => {
+  // 给专题ID添加前缀
+  const newSecId = `sa-${sec.id || `sec-${index}`}`;
+  const newSec = {
+    ...sec,
+    id: newSecId,
+    // 给题目ID添加前缀
+    probs: sec.probs.map(probId => `sa-${probId}`),
+    // 更新secName如果存在
+    secName: sec.secName ? `sa-${sec.secName}` : sec.secName
+  };
+  processedSecs.push(newSec);
+
+  // 处理该专题下的题目
+  sec.probs.forEach(probId => {
+    if (algoNotes.prob[probId]) {
+      const prob = {
+        ...algoNotes.prob[probId],
+        // 更新题目所属的专题ID和名称
+        secName: newSecId,
+        secFullName: sec.name
+      };
+      processedProbs[`sa-${probId}`] = prob;
+    }
+  });
+});
+
+// 处理算法原理汇总的专题和题目
+algoPrinciple.secs.forEach((sec, index) => {
+  // 给专题ID添加前缀
+  const newSecId = `sa-${sec.id || `sec-${algoNotes.secs.length + index}`}`;
+  const newSec = {
+    ...sec,
+    id: newSecId,
+    // 给题目ID添加前缀
+    probs: sec.probs.map(probId => `sa-${probId}`),
+    // 更新secName如果存在
+    secName: sec.secName ? `sa-${sec.secName}` : sec.secName
+  };
+  processedSecs.push(newSec);
+
+  // 处理该专题下的题目
+  sec.probs.forEach(probId => {
+    if (algoPrinciple.prob[probId]) {
+      const prob = {
+        ...algoPrinciple.prob[probId],
+        // 更新题目所属的专题ID和名称
+        secName: newSecId,
+        secFullName: sec.name
+      };
+      processedProbs[`sa-${probId}`] = prob;
+    }
+  });
+});
+
 const 专题算法 = {
   book: {
     title: '专题算法 · 算法笔记与原理',
     subtitle: '算法学习笔记汇总 + 核心算法原理详解 · 涵盖数据结构、算法专题与面试真题等内容',
     short: '专题算法',
     stats: [
-      { v: String(algoNotes.secs.length + algoPrinciple.secs.length), k: '专题分类' },
+      { v: String(processedSecs.length), k: '专题分类' },
+      { v: String(Object.keys(processedProbs).length), k: '题目数量' },
       { v: 'Go', k: '代码实现' }
     ]
   },
-  secs: [...algoNotes.secs, ...algoPrinciple.secs],
-  prob: { ...algoNotes.prob, ...algoPrinciple.prob }
+  secs: processedSecs,
+  prob: processedProbs
 };
 
 writeData('special-algorithm-data.js', 'specialAlgorithm', 专题算法);

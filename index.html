@@ -473,6 +473,7 @@ function switchBook(key){
   window.__filter = 'all';
   renderHeader();
   renderList();
+  renderRoadmap();
   IDX = buildIndex();
   if (location.hash.indexOf('#/book/'+key+'/') !== 0){
     location.hash = '#/book/' + key + '/';
@@ -485,6 +486,237 @@ function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
 
 function diffName(d){ return d==='e'?'简单':d==='m'?'中等':'困难'; }
 function diffCls(d){ return 'lv lv-'+d; }
+
+function renderDefaultRoadmap(svgBox, sections) {
+  // Simple layout: arrange sections in grid based on their count
+  if (sections.length === 0) return;
+
+  // Calculate layout
+  var cols = 4;
+  var colWidth = 172;
+  var rowHeight = 106;
+  var paddingX = 24;
+  var paddingY = 50;
+  var svgWidth = Math.max(1000, cols * colWidth + 50);
+  var svgHeight = Math.ceil(sections.length / cols) * rowHeight + 100;
+
+  // Update SVG dimensions
+  svgBox.setAttribute('viewBox', '0 0 ' + svgWidth + ' ' + svgHeight);
+  svgBox.setAttribute('style', 'min-width:' + svgWidth + 'px');
+
+  // Add background rectangles for phases
+  var phases = [
+    { name: '阶段 1 · 基础基石', color: '#4a6bc7', count: Math.ceil(sections.length * 0.25) },
+    { name: '阶段 2 · 核心数据结构', color: '#2e9e6b', count: Math.ceil(sections.length * 0.5) },
+    { name: '阶段 3 · 高级主题', color: '#d97f2b', count: Math.ceil(sections.length * 0.75) },
+    { name: '阶段 4 · 进阶算法', color: '#8a5cd0', count: sections.length }
+  ];
+
+  phases.forEach(function(phase, idx){
+    var y = paddingY + idx * rowHeight * 0.5;
+    var rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('x', '6');
+    rect.setAttribute('y', y);
+    rect.setAttribute('width', svgWidth - 12);
+    rect.setAttribute('height', rowHeight - 20);
+    rect.setAttribute('rx', '12');
+    rect.setAttribute('fill', phase.color);
+    rect.setAttribute('fill-opacity', '0.05');
+    rect.setAttribute('stroke', phase.color);
+    rect.setAttribute('stroke-opacity', '0.22');
+    rect.setAttribute('stroke-width', '1');
+    svgBox.appendChild(rect);
+
+    var text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('x', '20');
+    text.setAttribute('y', y + 18);
+    text.setAttribute('font-size', '12');
+    text.setAttribute('font-weight', '700');
+    text.setAttribute('fill', phase.color);
+    text.textContent = phase.name;
+    svgBox.appendChild(text);
+  });
+
+  // Add section nodes
+  sections.forEach(function(s, idx){
+    var col = idx % cols;
+    var row = Math.floor(idx / cols);
+    var x = paddingX + col * colWidth;
+    var y = paddingY + row * rowHeight + 50;
+
+    // Create group
+    var g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.setAttribute('style', 'cursor:pointer');
+    g.setAttribute('onclick', 'location.hash="#/book/'+CUR_BOOK+'/'+s.id+'"');
+
+    // Background rect
+    var rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('x', x);
+    rect.setAttribute('y', y);
+    rect.setAttribute('width', colWidth);
+    rect.setAttribute('height', 62);
+    rect.setAttribute('rx', '10');
+    rect.setAttribute('fill', '#ffffff');
+    rect.setAttribute('stroke', '#4a6bc7');
+    rect.setAttribute('stroke-width', '1.6');
+    g.appendChild(rect);
+
+    // Transparent rect for title
+    var titleRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    titleRect.setAttribute('x', x);
+    titleRect.setAttribute('y', y);
+    titleRect.setAttribute('width', colWidth);
+    titleRect.setAttribute('height', 62);
+    titleRect.setAttribute('rx', '10');
+    titleRect.setAttribute('fill', 'transparent');
+    titleRect.setAttribute('title', s.short || s.name + '（' + s.probs.length + ' 题）· 点击跳到该专题');
+    g.appendChild(titleRect);
+
+    // Section name
+    var nameText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    nameText.setAttribute('x', x + colWidth/2);
+    nameText.setAttribute('y', y + 26);
+    nameText.setAttribute('font-size', '13.5');
+    nameText.setAttribute('font-weight', '700');
+    nameText.setAttribute('text-anchor', 'middle');
+    nameText.setAttribute('fill', '#1A1B1C');
+    nameText.textContent = s.short || s.name;
+    g.appendChild(nameText);
+
+    // Problem count
+    var countText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    countText.setAttribute('x', x + colWidth/2);
+    countText.setAttribute('y', y + 44);
+    countText.setAttribute('font-size', '10.5');
+    countText.setAttribute('text-anchor', 'middle');
+    countText.setAttribute('fill', '#6B7280');
+    countText.textContent = s.probs.length + ' 题';
+    g.appendChild(countText);
+
+    svgBox.appendChild(g);
+  });
+}
+
+function renderSpecialAlgorithmRoadmap(svgBox, sections) {
+  // Special algorithm roadmap - simpler layout for learning notes
+  if (sections.length === 0) return;
+
+  // Calculate layout - 2 columns for better readability
+  var cols = 2;
+  var colWidth = 200;
+  var rowHeight = 100;
+  var paddingX = 40;
+  var paddingY = 60;
+  var svgWidth = Math.max(800, cols * colWidth + 80);
+  var svgHeight = Math.ceil(sections.length / cols) * rowHeight + 100;
+
+  // Update SVG dimensions
+  svgBox.setAttribute('viewBox', '0 0 ' + svgWidth + ' ' + svgHeight);
+  svgBox.setAttribute('style', 'min-width:' + svgWidth + 'px');
+
+  // Add section nodes
+  sections.forEach(function(s, idx){
+    var col = idx % cols;
+    var row = Math.floor(idx / cols);
+    var x = paddingX + col * colWidth;
+    var y = paddingY + row * rowHeight;
+
+    // Create group
+    var g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.setAttribute('style', 'cursor:pointer');
+    g.setAttribute('onclick', 'location.hash="#/book/'+CUR_BOOK+'/'+s.id+'"');
+
+    // Background rect with dynamic color based on section type
+    var rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    var hue = (idx * 60) % 360;
+    var color = `hsl(${hue}, 70%, 90%)`;
+    var borderColor = `hsl(${hue}, 70%, 50%)`;
+
+    rect.setAttribute('x', x);
+    rect.setAttribute('y', y);
+    rect.setAttribute('width', colWidth - 20);
+    rect.setAttribute('height', 80);
+    rect.setAttribute('rx', '12');
+    rect.setAttribute('fill', color);
+    rect.setAttribute('stroke', borderColor);
+    rect.setAttribute('stroke-width', '2');
+    g.appendChild(rect);
+
+    // Section name
+    var nameText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    nameText.setAttribute('x', x + (colWidth - 20)/2);
+    nameText.setAttribute('y', y + 30);
+    nameText.setAttribute('font-size', '14');
+    nameText.setAttribute('font-weight', '600');
+    nameText.setAttribute('text-anchor', 'middle');
+    nameText.setAttribute('fill', '#1A1B1C');
+    nameText.textContent = s.short || s.name;
+    g.appendChild(nameText);
+
+    // Problem count
+    var countText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    countText.setAttribute('x', x + (colWidth - 20)/2);
+    countText.setAttribute('y', y + 55);
+    countText.setAttribute('font-size', '11');
+    countText.setAttribute('text-anchor', 'middle');
+    countText.setAttribute('fill', '#6B7280');
+    countText.textContent = s.probs.length + ' 个知识点';
+    g.appendChild(countText);
+
+    svgBox.appendChild(g);
+  });
+}
+
+function renderRoadmap(){
+  var b = curBook(); if (!b) return;
+  var svgBox = document.getElementById('roadmap-svg');
+  var notesBox = document.getElementById('roadmap-notes');
+  var sourceBox = document.getElementById('roadmap-source');
+  var titleBox = document.getElementById('roadmap-title');
+  var badgeBox = document.getElementById('roadmap-badge');
+  var descBox = document.getElementById('roadmap-desc');
+
+  // Clear existing content
+  svgBox.innerHTML = '<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker></defs>';
+  notesBox.innerHTML = '';
+  sourceBox.innerHTML = '';
+
+  // Update title and badge
+  titleBox.textContent = '刷题路径 · Roadmap 总览';
+  badgeBox.textContent = b.secs.length + ' 专题 · ' + Object.keys(b.prob).length + ' 题';
+  descBox.textContent = '按专题分类整理，点击任意节点直达对应专题学习';
+
+  // Different roadmap for different books
+  if (CUR_BOOK === 'specialAlgorithm') {
+    renderSpecialAlgorithmRoadmap(svgBox, b.secs);
+    // Add special notes for algorithm notes
+    var specialNotes = [
+      '<b>学习建议：</b>先掌握基础数据结构，再深入算法原理',
+      '<b>内容构成：</b>包含算法笔记汇总和核心算法原理详解',
+      '<b>使用方式：</b>点击专题节点查看详细知识点和Go代码实现'
+    ];
+    specialNotes.forEach(function(note){
+      var li = document.createElement('li');
+      li.innerHTML = note;
+      notesBox.appendChild(li);
+    });
+    sourceBox.innerHTML = '来源：算法笔记汇总.md + 算法原理汇总.md · 共 ' + b.secs.length + ' 专题 ' + Object.keys(b.prob).length + ' 知识点 · Go 代码实现';
+  } else {
+    renderDefaultRoadmap(svgBox, b.secs);
+    // Add default notes
+    var defaultNotes = [
+      '<b>主线：</b>数组与哈希 → 双指针 → 滑动窗口；链表 → 树 BFS / 树 DFS → 前缀树；树 DFS → 回溯 → 一维 DP。',
+      '<b>关键依赖：</b>数组与哈希是基石：→ 二分查找（有序数组）、→ 栈（线性模拟）、→ 堆（Top-K 优先队列）。',
+      '<b>独立专题：</b>贪心 · 区间 · 数学几何 · 位运算均以数组与哈希为基础，可穿插并行学习。'
+    ];
+    defaultNotes.forEach(function(note){
+      var li = document.createElement('li');
+      li.innerHTML = note;
+      notesBox.appendChild(li);
+    });
+    sourceBox.innerHTML = '来源：CSDN《LEETCODE PATTERNS &amp; Neetcode 刷题记录（Python 版）》 · 共 ' + b.secs.length + ' 专题 ' + Object.keys(b.prob).length + ' 题 · Go 实现（点击题名进入独立解题页：详细思路 + 代码 + 时空复杂度）';
+  }
+}
 
 function renderList(){
   var nav = document.getElementById('nav');
@@ -624,6 +856,7 @@ function router(){
     window.__filter = 'all';
     renderHeader();
     renderList();
+    renderRoadmap();
     IDX = buildIndex();
   }
   var path = parsed.path;
