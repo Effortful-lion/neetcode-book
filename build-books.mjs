@@ -284,3 +284,29 @@ const iv = {
   prob: ivParsed.prob
 };
 writeData('interview-data.js', 'interview', iv);
+
+// 专题算法 - 算法笔记汇总和算法原理汇总
+const algoNotesRaw = readFileSync('docs/算法笔记汇总.md', 'utf8');
+const algoPrincipleRaw = readFileSync('docs/算法原理汇总.md', 'utf8');
+
+// 解析算法笔记汇总
+const algoNotes = parseNeetcode(algoNotesRaw);
+// 解析算法原理汇总
+const algoPrinciple = parseNeetcode(algoPrincipleRaw);
+
+// 合并两个内容到专题算法书单
+const 专题算法 = {
+  book: {
+    title: '专题算法 · 算法笔记与原理',
+    subtitle: '算法学习笔记汇总 + 核心算法原理详解 · 涵盖数据结构、算法专题与面试真题等内容',
+    short: '专题算法',
+    stats: [
+      { v: String(algoNotes.secs.length + algoPrinciple.secs.length), k: '专题分类' },
+      { v: 'Go', k: '代码实现' }
+    ]
+  },
+  secs: [...algoNotes.secs, ...algoPrinciple.secs],
+  prob: { ...algoNotes.prob, ...algoPrinciple.prob }
+};
+
+writeData('special-algorithm-data.js', 'specialAlgorithm', 专题算法);
