@@ -1370,29 +1370,39 @@ function renderSuggest(q, customRes = null){
   box.innerHTML=html;
   box.classList.add('on');
 
-  // 绑定点击事件
-  Array.prototype.forEach.call(box.querySelectorAll('.s-item[data-id]'),function(el){
-    el.addEventListener('click',function(){
-      var id=el.getAttribute('data-id');
-      if(id){
-        document.getElementById('q').value='';
-        renderSuggest('');
-        addSearchHistory(el.querySelector('.s-t').textContent.replace(/\[简单\]\s*/,'').replace(/\[中等\]\s*/,'').replace(/\[困难\]\s*/,''));
-        goProb(id);
-      }
-    });
-  });
+  // 使用事件委托处理所有点击事件，避免重复绑定
+  box.onclick = function(e) {
+    const item = e.target.closest('.s-item');
+    if(!item) return;
+    e.stopPropagation();
 
-  // 绑定专题快速入口的点击事件
-  Array.prototype.forEach.call(box.querySelectorAll('.s-item:not([data-id])'),function(el){
-    el.addEventListener('click',function(){
-      var href = el.getAttribute('onclick').match(/location.hash='([^']+)'/)[1];
-      if(href){
+    // 处理题目搜索结果点击
+    const dataId = item.getAttribute('data-id');
+    if(dataId) {
+      const id = dataId;
+      document.getElementById('q').value = '';
+      renderSuggest('');
+      addSearchHistory(item.querySelector('.s-t').textContent.replace(/\[简单\]\s*/,'').replace(/\[中等\]\s*/,'').replace(/\[困难\]\s*/,''));
+      goProb(id);
+      return;
+    }
+
+    // 处理分类标题（搜索结果/历史记录），不需要处理
+    if(item.classList.contains('s-history') && !item.getAttribute('onclick')) {
+      return;
+    }
+
+    // 处理专题快速入口点击
+    const onclickAttr = item.getAttribute('onclick');
+    if(onclickAttr) {
+      const hrefMatch = onclickAttr.match(/location\.hash='([^']+)'/);
+      if(hrefMatch && hrefMatch[1]) {
+        const href = hrefMatch[1];
         location.hash = href;
         renderSuggest('');
       }
-    });
-  });
+    }
+  };
 }
 function sugMove(d){if(!SUG_ITEMS.length)return;SUG_CUR=(SUG_CUR+d+SUG_ITEMS.length)%SUG_ITEMS.length;var items=document.getElementById('suggest').querySelectorAll('.s-item[data-id]');Array.prototype.forEach.call(items,function(el,i){el.classList.toggle('active',i===SUG_CUR);});if(items[SUG_CUR])items[SUG_CUR].scrollIntoView({block:'nearest'});}
 // 搜索历史功能
@@ -1493,7 +1503,16 @@ function initSearch(){
         }
         else if(e.key==='Escape'){renderSuggest('');q.blur();}
     });
-    document.addEventListener('click',function(e){if(!e.target.closest('.search-box'))renderSuggest('');});
+    document.addEventListener('click',function(e){
+    // 不关闭suggest的情况：点击搜索框内部、suggest内部、筛选控件区域
+    const inSearchBox = e.target.closest('.search-box');
+    const inSuggest = e.target.closest('.suggest');
+    const inFilterBar = e.target.closest('.filter-bar');
+
+    if(!inSearchBox && !inSuggest && !inFilterBar){
+      renderSuggest('');
+    }
+  });
 }
 function initTheme(){var saved=localStorage.getItem('lc-theme');if(saved)document.body.setAttribute('data-theme',saved);var b=document.getElementById('themeBtn');b.textContent=document.body.getAttribute('data-theme')==='dark'?'☀️':'🌙';b.addEventListener('click',function(){var cur=document.body.getAttribute('data-theme')==='dark'?'':'dark';if(cur)document.body.setAttribute('data-theme',cur);else document.body.removeAttribute('data-theme');localStorage.setItem('lc-theme',cur);b.textContent=cur==='dark'?'☀️':'🌙';});}
 function initProgress(){var bar=document.getElementById('resumeBar');var raw=localStorage.getItem('lc-progress');if(!raw)return;try{var o=JSON.parse(raw);var book=o.book||'leetcode';if(book!==CUR_BOOK)return;var p=PROB[o.id];if(!p)return;bar.innerHTML='<span>上次读到：<a href="#/book/'+book+'/p/'+o.id+'">'+o.id+'. '+esc(p.title)+'</a> · '+diffName(p.d)+' · '+esc(p.secName)+' · '+new Date(o.t).toLocaleString()+'</span><span class="resume-close" id="resumeClose">×</span>';bar.classList.add('on');document.getElementById('resumeClose').addEventListener('click',function(){localStorage.removeItem('lc-progress');bar.classList.remove('on');});}catch(e){}}
