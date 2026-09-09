@@ -1328,31 +1328,32 @@ function renderSuggest(q, customRes = null){
   SUG_CUR=-1;
 
   var html='';
+  var hasHistory = false;
+  var historyHtml = '';
 
-  // 当搜索框为空时，显示搜索历史和快速筛选
-  if(!q){
-    var historyHtml = renderSearchHistory();
-    if(historyHtml) html += historyHtml;
-
-    // 添加快速专题入口
-    if(SECS.length > 0){
-      html += '<div class="s-item s-history">所有专题</div>';
-      SECS.forEach(function(s){
-        html += `<div class="s-item" onclick="location.hash='#/book/${CUR_BOOK}/${s.id}'">
-          <span class="s-t">${esc(s.short || s.name)}</span>
-          <span class="s-d">${s.probs.length} 个知识点</span>
-        </div>`;
-      });
+  // 处理搜索历史
+  if(q){
+    // 有搜索关键词时，先显示搜索历史
+    historyHtml = renderSearchHistory();
+    if(historyHtml) {
+      html += historyHtml;
+      hasHistory = true;
     }
   } else {
-    // 添加搜索历史中的相关历史？不，只显示当前搜索的结果
-    var historyHtml = renderSearchHistory();
-    if(historyHtml) html += historyHtml;
+    // 搜索框为空时，只显示搜索历史（不再显示快速专题入口，页面已有全局目录）
+    historyHtml = renderSearchHistory();
+    if(historyHtml) {
+      html += historyHtml;
+      hasHistory = true;
+    }
   }
 
   // 处理搜索结果
-  if(res.length > 0){
-    html += '<div class="s-item s-history">搜索结果</div>';
+  if(q && res.length > 0){
+    // 如果有搜索历史，添加分隔标题
+    if(hasHistory){
+      html += '<div class="s-item s-history">搜索结果</div>';
+    }
     res.forEach(function(r,i){
       var dn=diffName(r.d),dc=diffCls(r.d);
       var companyPart = r.companies ? `<span class="co-line">${esc(r.companies)}</span>` : '';
@@ -1361,20 +1362,35 @@ function renderSuggest(q, customRes = null){
         +'<div class="s-d">'+esc(r.sec)+' · '+(companyPart ? esc(companyPart) + ' · ' : '')+hl(r.snip,q)+'</div>'
         +'</div>';
     });
-  } else if(!q && !historyHtml){
-    html+='<div class="s-item" style="color:var(--muted);cursor:default">无匹配结果</div>';
-  } else if(!res.length && q){
-    html+='<div class="s-item" style="color:var(--muted);cursor:default">未找到匹配结果</div>';
+  } else if(q && res.length === 0){
+    // 有搜索关键词但无结果
+    if(hasHistory){
+      html += '<div class="s-item s-history">无匹配结果</div>';
+    } else {
+      html+='<div class="s-item" style="color:var(--muted);cursor:default">未找到匹配结果</div>';
+    }
   }
 
+  // 更新suggest内容
   box.innerHTML=html;
-  box.classList.add('on');
+
+  // 显示/隐藏suggest
+  if(html.trim()){
+    box.classList.add('on');
+  } else {
+    box.classList.remove('on');
+  }
 
   // 使用事件委托处理所有点击事件，避免重复绑定
   box.onclick = function(e) {
     const item = e.target.closest('.s-item');
     if(!item) return;
     e.stopPropagation();
+
+    // 跳过分类标题（搜索结果/历史记录）
+    if(item.classList.contains('s-history') && !item.getAttribute('data-id')) {
+      return;
+    }
 
     // 处理题目搜索结果点击
     const dataId = item.getAttribute('data-id');
@@ -1385,22 +1401,6 @@ function renderSuggest(q, customRes = null){
       addSearchHistory(item.querySelector('.s-t').textContent.replace(/\[简单\]\s*/,'').replace(/\[中等\]\s*/,'').replace(/\[困难\]\s*/,''));
       goProb(id);
       return;
-    }
-
-    // 处理分类标题（搜索结果/历史记录），不需要处理
-    if(item.classList.contains('s-history') && !item.getAttribute('onclick')) {
-      return;
-    }
-
-    // 处理专题快速入口点击
-    const onclickAttr = item.getAttribute('onclick');
-    if(onclickAttr) {
-      const hrefMatch = onclickAttr.match(/location\.hash='([^']+)'/);
-      if(hrefMatch && hrefMatch[1]) {
-        const href = hrefMatch[1];
-        location.hash = href;
-        renderSuggest('');
-      }
     }
   };
 }
