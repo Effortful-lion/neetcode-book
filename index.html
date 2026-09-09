@@ -1284,7 +1284,7 @@ function search(q, filters = {}){
     // 应用筛选条件
     if(filters.sec && it.sec !== filters.sec) return;
     if(filters.d && it.d !== filters.d) return;
-    if(filters.company && (!it.companies || !it.companies.includes(filters.company))) return;
+    if(filters.company && (!it.companies || !it.companies.split(' · ').includes(filters.company))) return;
 
     // 计算得分
     if(q){
