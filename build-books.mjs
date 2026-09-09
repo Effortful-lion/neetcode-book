@@ -191,6 +191,32 @@ function parseFeishu(raw) {
         continue;
       }
       if (/难度系数/.test(t)) { p.stars = (t.match(/⭐/g) || []).length; mode = 'diff'; continue; }
+      // 处理公司名字段：**公司**：字节跳动 · 2023
+      if (/^\*\*公司/.test(t)) {
+        const rest = t.replace(/^\*\*公司[^：:：]*[:：]?\s*/, '').trim();
+        p.companies = rest;
+        mode = 'body';
+        continue;
+      }
+      // 兼容飞书格式的公司提取（**公司：字节跳动 · 2023**）
+      const cleanT = clean(t);
+      if (/公司：/.test(cleanT) && !p.companies) {
+        const rest = t.replace(/^[^：:：]*[:：]?\s*/, '').trim();
+        if (rest && !/输入|输出/.test(rest)) {
+          p.companies = rest;
+          mode = 'body';
+          continue;
+        }
+      }
+      // 匹配**公司**：字节跳动 · 2023格式
+      if (/^\*\*公司/.test(t) && !p.companies) {
+        const rest = t.replace(/^\*\*公司[^：:：]*[:：]?\s*/, '').trim();
+        if (rest && !/输入|输出/.test(rest)) {
+          p.companies = rest;
+          mode = 'body';
+          continue;
+        }
+      }
       if (/^\*\*📝/.test(t) || (/思路分析/.test(t) && t.startsWith('**'))) {
         mode = 'ideas';
         const rest = t.replace(/^\*\*[^*]*\*\*/, '').trim();
@@ -214,8 +240,15 @@ function parseFeishu(raw) {
       if (mode === 'tc') { if (!p.tc) p.tc = clean(t); else if (!p.sc) p.sc = clean(t); continue; }
       if (!p.companies && !/输入|输出/.test(t)) {
         const ut = unesc(t);
-        const ms = [...ut.matchAll(/([一-龥A-Za-z][一-龥A-Za-z0-9&\s.·]*?)\s*[-−–]\s*[\(（]?\d{4}/g)];
+        // 匹配两种格式：公司名 - 年份 或 公司名 · 年份
+        const ms = [...ut.matchAll(/([一-龥A-Za-z][一-龥A-Za-z0-9&\s.·]*?)\s*[-−–·]\s*[\(（]?\d{4}/g)];
         if (ms.length) { p.companies = [...new Set(ms.map((m) => m[1].trim()))].join(' · '); continue; }
+        // 匹配直接的公司名：公司：字节跳动
+        const companyMatch = t.match(/公司：\s*([一-龥A-Za-z0-9&\s.·]+)/);
+        if (companyMatch && companyMatch[1]) {
+          p.companies = companyMatch[1].trim();
+          continue;
+        }
       }
       p.examples.push(clean(t));
     }
@@ -239,9 +272,15 @@ function parseFeishu(raw) {
       curProb.oneline = curProb.assess ? curProb.assess.slice(0, 120) : (curProb.ideas[0] || '').slice(0, 120);
       continue;
     }
-    if (sec.level === 3 && curProb) {
-      curProb.ideas.push('**' + sec.title + '**');
+    if (sec.level === 3 && curSec) {
+      flushProb();
+      curProb = { title: sec.title, companies: '', examples: [], assess: '', stars: 0, ideas: [], codes: [], tc: '', sc: '', lcSlug: '', d: 'm' };
       parseBody(curProb, body);
+      curProb.d = curProb.stars >= 4 ? 'h' : curProb.stars <= 2 ? 'e' : 'm';
+      curProb.oneline = curProb.assess ? curProb.assess.slice(0, 120) : (curProb.ideas[0] || '').slice(0, 120);
+      curSec.probs.push(curProb.id);
+      prob[curProb.id] = curProb;
+      curProb = null;
     }
   }
   flushProb();
@@ -266,14 +305,13 @@ function writeData(file, globalKey, data) {
 }
 
 // LeetCode
-const lcRaw = readFileSync('neetcode-roadmap.md', 'utf8');
+const lcRaw = readFileSync('docs/neetcode-roadmap.md', 'utf8');
 const lc = parseNeetcode(lcRaw);
 lc.book.short = 'LeetCode Roadmap';
 writeData('leetcode-data.js', 'leetcode', lc);
 
-// 面经 (commented out because 大厂面经.md is missing)
-/*
-const ivRaw = readFileSync('大厂面经.md', 'utf8');
+// 面经
+const ivRaw = readFileSync('docs/大厂面经.md', 'utf8');
 const ivParsed = parseFeishu(ivRaw);
 const nProbs = Object.keys(ivParsed.prob).length;
 const iv = {
@@ -291,7 +329,6 @@ const iv = {
   prob: ivParsed.prob
 };
 writeData('interview-data.js', 'interview', iv);
-*/
 
 // 专题算法 - 算法笔记汇总和算法原理汇总
 const algoNotesRaw = readFileSync('docs/算法笔记汇总.md', 'utf8');
