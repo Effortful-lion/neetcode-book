@@ -385,7 +385,7 @@
 <div class="toolbar">
   <select id="bookSelect" class="book-select" title="切换书单"></select>
   <div class="search-box">
-    <input id="q" type="search" placeholder="搜索题目：关键词或描述（如 双指针、岛屿数量、回溯找所有排列）" autocomplete="off">
+    <input id="q" type="search" placeholder="搜索题目 / 公司 / 关键词（如 双指针、字节、LRU 缓存）" autocomplete="off">
     <div class="suggest" id="suggest"></div>
   </div>
   <button class="theme-btn" id="themeBtn" title="切换深色模式">🌙</button>
@@ -518,10 +518,11 @@ function switchBook(key){
   SECS = BOOKS[key].secs;
   PROB = BOOKS[key].prob;
   window.__filter = 'all';
+  __sFilters = { sec: 'all', d: 'all', company: 'all' };
+  IDX = buildIndex();
   renderHeader();
   renderList();
   renderRoadmap();
-  IDX = buildIndex();
   if (location.hash.indexOf('#/book/'+key+'/') !== 0){
     location.hash = '#/book/' + key + '/';
   } else {
@@ -857,11 +858,31 @@ function renderFilterBar(){
   chips.forEach(function(ch){
     html += '<span class="chip'+(filter===ch.k?' on':'')+'" data-k="'+ch.k+'">'+ch.label+'</span>';
   });
+  // 搜索辅助筛选（专题 / 难度 / 公司）。随列表重绘重建，避免被 renderFilterBar 覆盖后丢失，
+  // 并始终反映“当前书单”的专题与公司标签；选择状态存在 __sFilters 中跨重绘保留。
+  var sf = window.__sFilters || __sFilters;
+  html += '<span class="sf-wrap" style="display:inline-flex;gap:6px;align-items:center;margin-left:12px;flex-wrap:wrap;">';
+  html += '<select id="search-filter-sec" class="st-select sf-select" data-f="sec" style="min-width:150px"><option value="all">所有专题</option>';
+  SECS.forEach(function(x){ html += '<option value="'+x.id+'"'+(sf.sec===x.id?' selected':'')+'>'+esc(x.short||x.name)+'</option>'; });
+  html += '</select>';
+  html += '<select id="search-filter-diff" class="st-select sf-select" data-f="d"><option value="all">所有难度</option>'
+    +'<option value="e"'+(sf.d==='e'?' selected':'')+'>简单</option>'
+    +'<option value="m"'+(sf.d==='m'?' selected':'')+'>中等</option>'
+    +'<option value="h"'+(sf.d==='h'?' selected':'')+'>困难</option></select>';
+  html += '<select id="search-filter-company" class="st-select sf-select" data-f="company" style="min-width:130px"><option value="all">所有公司</option>';
+  companyTags().forEach(function(cn){ html += '<option value="'+esc(cn)+'"'+(sf.company===cn?' selected':'')+'>'+esc(cn)+'</option>'; });
+  html += '</select></span>';
   bar.innerHTML = html;
   Array.prototype.forEach.call(bar.querySelectorAll('.chip'), function(el){
     el.addEventListener('click', function(){
       window.__filter = el.getAttribute('data-k');
       renderList();
+    });
+  });
+  Array.prototype.forEach.call(bar.querySelectorAll('.sf-select'), function(sel){
+    sel.addEventListener('change', function(){
+      __sFilters[sel.getAttribute('data-f')] = sel.value;
+      updateSearch();
     });
   });
 }
@@ -901,10 +922,11 @@ function router(){
     SECS = BOOKS[parsed.book].secs;
     PROB = BOOKS[parsed.book].prob;
     window.__filter = 'all';
+    __sFilters = { sec: 'all', d: 'all', company: 'all' };
+    IDX = buildIndex();
     renderHeader();
     renderList();
     renderRoadmap();
-    IDX = buildIndex();
   }
   var path = parsed.path;
   var m = path.match(/^\/p\/([a-zA-Z0-9]+)/);
@@ -1258,6 +1280,27 @@ function renderPager(id){
 
 /* ================= 搜索 / 主题 / 进度 / 复制 ================= */
 var IDX=[];
+/* 搜索面板上的筛选控件状态（专题/难度/公司），切书单时重置、列表重绘时保留 */
+var __sFilters = { sec: 'all', d: 'all', company: 'all' };
+function companyTags(){ // 当前书单去重后的公司标签（来源：题目 companies 字段，以 · 分隔）
+  var seen = {};
+  (IDX || []).forEach(function(it){
+    if (!it || !it.companies) return;
+    String(it.companies).split(' · ').forEach(function(c){ c = (c || '').trim(); if (c && !seen[c]) seen[c] = 1; });
+  });
+  return Object.keys(seen).sort();
+}
+function updateSearch(){ // 搜索框内容 + 筛选控件共同触发
+  var qEl = document.getElementById('q');
+  var q = qEl ? qEl.value : '';
+  var s = window.__sFilters || __sFilters;
+  var res = search(q, {
+    sec: s.sec && s.sec !== 'all' ? s.sec : null,
+    d: s.d && s.d !== 'all' ? s.d : null,
+    company: s.company && s.company !== 'all' ? s.company : null
+  });
+  renderSuggest(q, res);
+}
 function stripTag(s){return String(s).replace(/<[^>]+>/g,' ');}
 var ALIAS={'两数和':'两数之和','三数和':'三数之和','四数和':'四数之和','岛数':'岛屿数量','岛屿数':'岛屿数量','岛屿':'岛屿数量','异位词':'字母异位词','字母异位':'字母异位词','回文子串':'回文','回文链':'回文','dfs':'深度优先','bfs':'广度优先','层序':'广度优先','层遍历':'广度优先','dp':'动态规划','一维dp':'一维动态规划','trie':'前缀树','字典树':'前缀树','堆排':'堆','优先队列':'堆','topk':'前 k 个高频','前k':'前 k','二叉搜':'二叉搜索树','bst':'二叉搜索树','翻转':'反转','颠倒':'反转','删除':'移除','去掉':'移除','去重':'重复','缺失':'丢失','丢失数':'丢失','max':'最大','min':'最小','longest':'最长','shortest':'最短','count':'计数','sum':'和','求和':'和','并查':'并查集','union':'并查集','图连通':'并查集','高频':'堆','频次':'频','滑动':'滑动窗口','双指':'双指针','快慢':'双指针','前后指':'双指针','二分':'二分查找','折半':'二分查找','贪':'贪心','局部最优':'贪心','区间合并':'区间','区间调度':'区间','区间覆盖':'区间','异或':'位运算','与运算':'位运算','或运算':'位运算','几何':'数学几何','搜树':'二叉搜索树','字串':'子串','串联':'串连'};
 function normalize(s){return String(s||'').toLowerCase().replace(/\s+/g,' ').trim();}
@@ -1281,8 +1324,14 @@ function search(q, filters = {}){
   IDX.forEach(function(it){
     var sc=0;
 
-    // 应用筛选条件
-    if(filters.sec && it.sec !== filters.sec) return;
+    // 应用筛选条件（专题按“当前书单 section 的题目成员”判定，兼容各书 secName 命名差异）
+    if(filters.sec){
+      var secHit = false;
+      for (var si = 0; si < SECS.length; si++){
+        if (SECS[si].id === filters.sec && SECS[si].probs.indexOf(it.id) >= 0){ secHit = true; break; }
+      }
+      if (!secHit) return;
+    }
     if(filters.d && it.d !== filters.d) return;
     if(filters.company && (!it.companies || !it.companies.split(' · ').includes(filters.company))) return;
 
@@ -1348,18 +1397,18 @@ function renderSuggest(q, customRes = null){
     }
   }
 
-  // 处理搜索结果
-  if(q && res.length > 0){
+  // 处理搜索结果（有关键词；或仅用专题/难度/公司筛选且搜索框为空时，也展示命中项）
+  if(res.length > 0 && (q || customRes)){
     // 如果有搜索历史，添加分隔标题
     if(hasHistory){
-      html += '<div class="s-item s-history">搜索结果</div>';
+      html += '<div class="s-item s-history">' + (q ? '搜索结果' : '筛选结果') + '</div>';
     }
     res.forEach(function(r,i){
       var dn=diffName(r.d),dc=diffCls(r.d);
-      var companyPart = r.companies ? `<span class="co-line">${esc(r.companies)}</span>` : '';
+      var companyPart = r.companies ? '<span class="co-line">' + esc(r.companies) + '</span>' : '';
       html+='<div class="s-item" data-i="'+i+'" data-id="'+r.id+'">'
         +'<div class="s-t"><span class="'+dc+'">'+dn+'</span> '+r.id+'. '+hl(r.title,q)+'</div>'
-        +'<div class="s-d">'+esc(r.sec)+' · '+(companyPart ? esc(companyPart) + ' · ' : '')+hl(r.snip,q)+'</div>'
+        +'<div class="s-d">'+esc(r.sec)+' · '+(companyPart ? companyPart + ' · ' : '')+hl(r.snip,q)+'</div>'
         +'</div>';
     });
   } else if(q && res.length === 0){
@@ -1429,60 +1478,10 @@ function renderSearchHistory() {
 
 function initSearch(){
     IDX = buildIndex();
+    // 书单数据就绪后重建一次筛选条，让“公司”下拉带出当前书单的公司标签
+    renderFilterBar();
     var q = document.getElementById('q');
     var t;
-
-    // 添加搜索筛选控件
-    var filterBar = document.getElementById('filterBar');
-    filterBar.innerHTML += `
-        <div style="margin-left:10px;display:flex;gap:8px;align-items:center;">
-            <select id="search-filter-sec" class="st-select" style="min-width:150px;">
-                <option value="all">所有专题</option>
-                ${SECS.map(s => `<option value="${s.id}">${s.short || s.name}</option>`).join('')}
-            </select>
-            <select id="search-filter-diff" class="st-select">
-                <option value="all">所有难度</option>
-                <option value="e">简单</option>
-                <option value="m">中等</option>
-                <option value="h">困难</option>
-            </select>
-            <select id="search-filter-company" class="st-select" style="min-width:120px;">
-                <option value="all">所有公司</option>
-            </select>
-        </div>
-    `;
-
-    // 填充公司筛选选项
-    var companyFilter = document.getElementById('search-filter-company');
-    var companies = new Set();
-    IDX.forEach(item => {
-      if(item.companies){
-        item.companies.split(' · ').forEach(c => companies.add(c));
-      }
-    });
-    Array.from(companies).sort().forEach(c => {
-      var option = document.createElement('option');
-      option.value = c;
-      option.textContent = c;
-      companyFilter.appendChild(option);
-    });
-
-    // 监听筛选变化
-    var secFilter = document.getElementById('search-filter-sec');
-    var diffFilter = document.getElementById('search-filter-diff');
-    var companyFilter = document.getElementById('search-filter-company');
-    function updateSearch() {
-        var qVal = q.value;
-        var res = search(qVal, {
-            sec: secFilter.value !== 'all' ? secFilter.value : null,
-            d: diffFilter.value !== 'all' ? diffFilter.value : null,
-            company: companyFilter.value !== 'all' ? companyFilter.value : null
-        });
-        renderSuggest(qVal, res);
-    }
-    companyFilter.addEventListener('change', updateSearch);
-    secFilter.addEventListener('change', updateSearch);
-    diffFilter.addEventListener('change', updateSearch);
 
     q.addEventListener('input',function(){
         clearTimeout(t);

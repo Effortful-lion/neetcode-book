@@ -151,7 +151,9 @@ function parseFeishu(raw) {
   const lines = guarded.split('\n');
   const sections = [];
   lines.forEach((ln, idx) => {
-    const m = /^(#{1,3}) (.+)$/.exec(ln);
+    // 结构仅两级：# 专题分类 / ## 题目。三级及更深一律作为题目正文内容处理，
+    // 避免把「## 公司 / ### 题目」这类分组写法里的公司名误当成题目。
+    const m = /^(#{1,2}) (.+)$/.exec(ln);
     if (!m) return;
     const tt = unesc(m[2]);
     if (/^(definition|class|def|import|from)\b/i.test(tt)) return;
@@ -186,7 +188,7 @@ function parseFeishu(raw) {
       if (/^(java|python|c\+\+|go|golang|javascript|js)\s*:?\s*$/i.test(clean(t))) continue;
       if (/^\*\*🕵/.test(t) || (/面试评估/.test(t) && t.startsWith('**'))) {
         mode = 'assess';
-        const rest = t.replace(/^\*\*[^*]*\*\*/, '').trim();
+        const rest = t.replace(/^\*\*[^*]*\*\*/, '').trim().replace(/^[：:]\s*/, '');
         if (rest) p.assess += (p.assess ? ' ' : '') + clean(rest);
         continue;
       }
@@ -219,11 +221,12 @@ function parseFeishu(raw) {
       }
       if (/^\*\*📝/.test(t) || (/思路分析/.test(t) && t.startsWith('**'))) {
         mode = 'ideas';
-        const rest = t.replace(/^\*\*[^*]*\*\*/, '').trim();
+        const rest = t.replace(/^\*\*[^*]*\*\*/, '').trim().replace(/^[：:]\s*/, '');
         if (rest) p.ideas.push(clean(rest));
         continue;
       }
-      if (/^\*\*👨‍💻/.test(t) || (/代码\(/.test(t) && t.startsWith('**'))) { mode = 'code'; continue; }
+      // 兼容不同 emoji 编码（有无 ZWJ）及历史写法：**代码(Java)** / **👨💻代码实现**
+      if (t.startsWith('**') && /代码实现|代码[（(]|^代码/.test(clean(t))) { mode = 'code'; continue; }
       if (/复杂度分析/.test(t)) { mode = 'tc'; continue; }
       if (/时间复杂度/.test(t)) { p.tc = clean(t.replace(/^时间复杂度[:：]?/, '')); continue; }
       if (/空间复杂度/.test(t)) { p.sc = clean(t.replace(/^空间复杂度[:：]?/, '')); continue; }
@@ -236,7 +239,7 @@ function parseFeishu(raw) {
       if (/^\*\*示例/.test(t)) { mode = 'example'; continue; }
       if (mode === 'example') { p.examples.push(clean(t)); continue; }
       if (mode === 'assess') { p.assess += (p.assess ? ' ' : '') + clean(t); continue; }
-      if (mode === 'ideas') { p.ideas.push(clean(t)); continue; }
+      if (mode === 'ideas') { p.ideas.push(unesc(t)); continue; } // 保留 **加粗** 标记，供前端渲染
       if (mode === 'tc') { if (!p.tc) p.tc = clean(t); else if (!p.sc) p.sc = clean(t); continue; }
       if (!p.companies && !/输入|输出/.test(t)) {
         const ut = unesc(t);
@@ -271,16 +274,6 @@ function parseFeishu(raw) {
       curProb.d = curProb.stars >= 4 ? 'h' : curProb.stars <= 2 ? 'e' : 'm';
       curProb.oneline = curProb.assess ? curProb.assess.slice(0, 120) : (curProb.ideas[0] || '').slice(0, 120);
       continue;
-    }
-    if (sec.level === 3 && curSec) {
-      flushProb();
-      curProb = { title: sec.title, companies: '', examples: [], assess: '', stars: 0, ideas: [], codes: [], tc: '', sc: '', lcSlug: '', d: 'm' };
-      parseBody(curProb, body);
-      curProb.d = curProb.stars >= 4 ? 'h' : curProb.stars <= 2 ? 'e' : 'm';
-      curProb.oneline = curProb.assess ? curProb.assess.slice(0, 120) : (curProb.ideas[0] || '').slice(0, 120);
-      curSec.probs.push(curProb.id);
-      prob[curProb.id] = curProb;
-      curProb = null;
     }
   }
   flushProb();
