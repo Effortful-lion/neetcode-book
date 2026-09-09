@@ -95,6 +95,49 @@
   [data-theme="dark"] #roadmap-card svg path{stroke:#a5b0c0}
   [data-theme="dark"] #roadmap-card svg marker path{fill:#a5b0c0}
 
+/* 快速落地优化1：暗色模式下的代码复制按钮 */
+[data-theme="dark"] .code-tools button {
+    background: rgba(255, 255, 255, 0.12);
+    color: #e2e8f0;
+    border-color: rgba(255, 255, 255, 0.2);
+}
+[data-theme="dark"] .code-tools button:hover {
+    background: rgba(255, 255, 255, 0.18);
+}
+[data-theme="dark"] .code-tools button.ok {
+    color: #34d399;
+    border-color: #34d399;
+}
+
+/* 快速落地优化2：题目列表行高优化 */
+#sections tbody tr {
+    line-height: 1.7;
+}
+#sections table th {
+    line-height: 1.6;
+}
+
+/* 快速落地优化3：搜索高亮样式 */
+.s-item mark {
+    background: #ffe666;
+    color: #1A1B1C;
+    padding: 0 2px;
+    border-radius: 3px;
+}
+[data-theme="dark"] .s-item mark {
+    background: #fbbf24;
+    color: #1f2937;
+}
+
+/* 快速落地优化4：搜索提示样式 */
+.suggest {
+    max-height: 70vh;
+}
+.s-history {
+    background: rgba(155, 187, 244, .05);
+    font-weight: 600;
+}
+
   .toolbar{position:sticky;top:0;z-index:8;border-radius:12px;padding:10px 14px;margin:14px 0;display:flex;gap:10px;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.04)}
   .search-box{flex:1;position:relative}
   #q{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:14px;outline:none}
@@ -1211,12 +1254,135 @@ function tokenize(q){var n=normalize(q);if(!n)return[];var ps=n.split(/\s+/).fil
 function countHits(h,n){if(!n)return 0;var c=0,i=0;while((i=h.indexOf(n,i))>=0){c++;i+=n.length;}return c;}
 function sliceAround(t,q,len){if(!q)return t.slice(0,len);var n=t.toLowerCase();var c=q.toLowerCase().split(/\s+/).filter(Boolean);var b=-1;for(var i=0;i<c.length;i++){var p=n.indexOf(c[i]);if(p>=0&&(b<0||p<b))b=p;}if(b<0)return t.slice(0,len);var s=Math.max(0,b-8);return(s>0?'…':'')+t.slice(s,s+len);}
 function buildIndex(){var idx=[];for(var id in PROB){var p=PROB[id];var t=p.title||'';var o=p.oneline||'';var s=p.secName||'';var st=stripTag((p.steps||p.ideas||[]).join(' '));var ex=(p.examples||[]).join(' ');var co=p.companies||'';var e=p.extra||'';var f=(t+' '+o+' '+s+' '+st+' '+ex+' '+co+' '+e).toLowerCase();idx.push({id:id,title:t,d:p.d,sec:s,oneline:o,doc:f,titleLc:t.toLowerCase(),onelineLc:o.toLowerCase()});}return idx;}
-function search(q){q=(q||'').trim();if(!q)return[];var norm=normalize(q);var exp=aliasExpand(q);var whole=norm;var toks=tokenize(q);var exT=exp?exp.split(/\s+/).filter(Boolean):[];var res=[];IDX.forEach(function(it){var sc=0;var wF=countHits(it.doc,whole);if(wF>0)sc+=30*wF;var wT=countHits(it.titleLc,whole);if(wT>0)sc+=60*wT;var wO=countHits(it.onelineLc,whole);if(wO>0)sc+=40*wO;toks.forEach(function(tk){var w=tk.length>=3?1.6:(tk.length===2?1.2:0.6);var iT=countHits(it.titleLc,tk);if(iT>0)sc+=8*iT*w;var iO=countHits(it.onelineLc,tk);if(iO>0)sc+=4*iO*w;var iD=countHits(it.doc,tk);if(iD>0)sc+=0.5*iD;});exT.forEach(function(tk){var c=countHits(it.doc,tk);if(c>0)sc+=2;});if(sc>0)res.push({id:it.id,title:it.title,d:it.d,sec:it.sec,oneline:it.oneline,score:sc,snip:sliceAround(it.oneline||stripTag(it.doc),q,50)});});res.sort(function(a,b){if(b.score!==a.score)return b.score-a.score;var na=parseInt(a.id,10),nb=parseInt(b.id,10);if(!isNaN(na)&&!isNaN(nb))return na-nb;return a.id<b.id?-1:1;});return res.slice(0,30);}
+function search(q, filters = {}){
+  q=(q||'').trim();
+  if(!q && !filters.sec && !filters.d)return[];
+
+  var norm=normalize(q);
+  var exp=aliasExpand(q);
+  var whole=norm;
+  var toks=tokenize(q);
+  var exT=exp?exp.split(/\s+/).filter(Boolean):[];
+  var res=[];
+
+  IDX.forEach(function(it){
+    var sc=0;
+
+    // 应用筛选条件
+    if(filters.sec && it.sec !== filters.sec) return;
+    if(filters.d && it.d !== filters.d) return;
+
+    // 计算得分
+    if(q){
+      var wF=countHits(it.doc,whole);if(wF>0)sc+=30*wF;
+      var wT=countHits(it.titleLc,whole);if(wT>0)sc+=60*wT;
+      var wO=countHits(it.onelineLc,whole);if(wO>0)sc+=40*wO;
+
+      toks.forEach(function(tk){
+        var w=tk.length>=3?1.6:(tk.length===2?1.2:0.6);
+        var iT=countHits(it.titleLc,tk);if(iT>0)sc+=8*iT*w;
+        var iO=countHits(it.onelineLc,tk);if(iO>0)sc+=4*iO*w;
+        var iD=countHits(it.doc,tk);if(iD>0)sc+=0.5*iD;
+      });
+
+      exT.forEach(function(tk){var c=countHits(it.doc,tk);if(c>0)sc+=2;});
+    } else {
+      // 如果没有搜索词，只应用筛选
+      sc = 1;
+    }
+
+    if(sc>0)res.push({
+      id:it.id,title:it.title,d:it.d,sec:it.sec,oneline:it.oneline,
+      score:sc,snip:sliceAround(it.oneline||stripTag(it.doc),q,50)
+    });
+  });
+
+  res.sort(function(a,b){if(b.score!==a.score)return b.score-a.score;var na=parseInt(a.id,10),nb=parseInt(b.id,10);if(!isNaN(na)&&!isNaN(nb))return na-nb;return a.id<b.id?-1:1;});
+  return res.slice(0,30);
+}
 function hl(t,q){var o=esc(t);var qs=(q||'').toLowerCase().split(/\s+/).filter(Boolean);qs.forEach(function(k){if(!k)return;var re=new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi');o=o.replace(re,function(m){return '<mark>'+m+'</mark>';});});return o;}
 var SUG_CUR=-1,SUG_ITEMS=[];
-function renderSuggest(q){var box=document.getElementById('suggest');if(!q){box.classList.remove('on');box.innerHTML='';SUG_ITEMS=[];SUG_CUR=-1;return;}var res=search(q);SUG_ITEMS=res;SUG_CUR=-1;if(!res.length){box.innerHTML='<div class="s-item" style="color:var(--muted);cursor:default">无匹配结果</div>';box.classList.add('on');return;}var html='';res.forEach(function(r,i){var dn=diffName(r.d),dc=diffCls(r.d);html+='<div class="s-item" data-i="'+i+'" data-id="'+r.id+'"><div class="s-t"><span class="'+dc+'">'+dn+'</span> '+r.id+'. '+hl(r.title,q)+'</div><div class="s-d">'+esc(r.sec)+' · '+hl(r.snip,q)+'</div></div>';});box.innerHTML=html;box.classList.add('on');Array.prototype.forEach.call(box.querySelectorAll('.s-item[data-id]'),function(el){el.addEventListener('click',function(){var id=el.getAttribute('data-id');document.getElementById('q').value='';renderSuggest('');if(id)goProb(id);});});}
+" data-id="'+r.id+'"><div class="s-t"><span class="'+dc+'">'+dn+'</span> '+r.id+'. '+hl(r.title,q)+'</div><div class="s-d">'+esc(r.sec)+' · '+hl(r.snip,q)+'</div></div>';});box.innerHTML=html;box.classList.add('on');Array.prototype.forEach.call(box.querySelectorAll('.s-item[data-id]'),function(el){el.addEventListener('click',function(){var id=el.getAttribute('data-id');document.getElementById('q').value='';renderSuggest('');if(id)goProb(id);});});}
 function sugMove(d){if(!SUG_ITEMS.length)return;SUG_CUR=(SUG_CUR+d+SUG_ITEMS.length)%SUG_ITEMS.length;var items=document.getElementById('suggest').querySelectorAll('.s-item[data-id]');Array.prototype.forEach.call(items,function(el,i){el.classList.toggle('active',i===SUG_CUR);});if(items[SUG_CUR])items[SUG_CUR].scrollIntoView({block:'nearest'});}
-function initSearch(){IDX=buildIndex();var q=document.getElementById('q');var t;q.addEventListener('input',function(){clearTimeout(t);t=setTimeout(function(){renderSuggest(q.value);},80);});q.addEventListener('keydown',function(e){if(e.key==='ArrowDown'){e.preventDefault();sugMove(1);}else if(e.key==='ArrowUp'){e.preventDefault();sugMove(-1);}else if(e.key==='Enter'){e.preventDefault();var pick=SUG_CUR>=0?SUG_ITEMS[SUG_CUR]:SUG_ITEMS[0];if(pick){q.value='';renderSuggest('');goProb(pick.id);}}else if(e.key==='Escape'){renderSuggest('');q.blur();}});document.addEventListener('click',function(e){if(!e.target.closest('.search-box'))renderSuggest('');});}
+// 搜索历史功能
+function getSearchHistory() {
+    return JSON.parse(localStorage.getItem('lc-search-history') || '[]');
+}
+function addSearchHistory(q) {
+    if (!q.trim()) return;
+    var history = getSearchHistory();
+    history = history.filter(item => item !== q.trim());
+    history.unshift(q.trim());
+    history = history.slice(0, 10);
+    localStorage.setItem('lc-search-history', JSON.stringify(history));
+}
+function renderSearchHistory() {
+    var history = getSearchHistory();
+    if (history.length === 0) return '';
+    var html = '<div class="s-item s-history">搜索历史</div>';
+    history.forEach(q => {
+        html += `<div class="s-item" onclick="document.getElementById('q').value='${q.replace(/'/g, '\\\'')}';renderSuggest('${q.replace(/'/g, '\\\'')}');">${esc(q)}</div>`;
+    });
+    return html;
+}
+
+function initSearch(){
+    IDX = buildIndex();
+    var q = document.getElementById('q');
+    var t;
+
+    // 添加搜索筛选控件
+    var filterBar = document.getElementById('filterBar');
+    filterBar.innerHTML += `
+        <div style="margin-left:10px;display:flex;gap:8px;align-items:center;">
+            <select id="search-filter-sec" class="st-select" style="min-width:150px;">
+                <option value="all">所有专题</option>
+                ${SECS.map(s => `<option value="${s.id}">${s.short || s.name}</option>`).join('')}
+            </select>
+            <select id="search-filter-diff" class="st-select">
+                <option value="all">所有难度</option>
+                <option value="e">简单</option>
+                <option value="m">中等</option>
+                <option value="h">困难</option>
+            </select>
+        </div>
+    `;
+
+    // 监听筛选变化
+    var secFilter = document.getElementById('search-filter-sec');
+    var diffFilter = document.getElementById('search-filter-diff');
+    function updateSearch() {
+        var qVal = q.value;
+        var res = search(qVal, {
+            sec: secFilter.value !== 'all' ? secFilter.value : null,
+            d: diffFilter.value !== 'all' ? diffFilter.value : null
+        });
+        renderSuggest(qVal, res);
+    }
+    secFilter.addEventListener('change', updateSearch);
+    diffFilter.addEventListener('change', updateSearch);
+
+    q.addEventListener('input',function(){
+        clearTimeout(t);
+        t=setTimeout(updateSearch,80);
+    });
+    q.addEventListener('keydown',function(e){
+        if(e.key==='ArrowDown'){e.preventDefault();sugMove(1);}
+        else if(e.key==='ArrowUp'){e.preventDefault();sugMove(-1);}
+        else if(e.key==='Enter'){
+            e.preventDefault();
+            var pick=SUG_CUR>=0?SUG_ITEMS[SUG_CUR]:SUG_ITEMS[0];
+            if(pick){
+                q.value='';
+                renderSuggest('');
+                addSearchHistory(pick.title);
+                goProb(pick.id);
+            }
+        }
+        else if(e.key==='Escape'){renderSuggest('');q.blur();}
+    });
+    document.addEventListener('click',function(e){if(!e.target.closest('.search-box'))renderSuggest('');});
+}
 function initTheme(){var saved=localStorage.getItem('lc-theme');if(saved)document.body.setAttribute('data-theme',saved);var b=document.getElementById('themeBtn');b.textContent=document.body.getAttribute('data-theme')==='dark'?'☀️':'🌙';b.addEventListener('click',function(){var cur=document.body.getAttribute('data-theme')==='dark'?'':'dark';if(cur)document.body.setAttribute('data-theme',cur);else document.body.removeAttribute('data-theme');localStorage.setItem('lc-theme',cur);b.textContent=cur==='dark'?'☀️':'🌙';});}
 function initProgress(){var bar=document.getElementById('resumeBar');var raw=localStorage.getItem('lc-progress');if(!raw)return;try{var o=JSON.parse(raw);var book=o.book||'leetcode';if(book!==CUR_BOOK)return;var p=PROB[o.id];if(!p)return;bar.innerHTML='<span>上次读到：<a href="#/book/'+book+'/p/'+o.id+'">'+o.id+'. '+esc(p.title)+'</a> · '+diffName(p.d)+' · '+esc(p.secName)+' · '+new Date(o.t).toLocaleString()+'</span><span class="resume-close" id="resumeClose">×</span>';bar.classList.add('on');document.getElementById('resumeClose').addEventListener('click',function(){localStorage.removeItem('lc-progress');bar.classList.remove('on');});}catch(e){}}
 function copyText(code, btn){
