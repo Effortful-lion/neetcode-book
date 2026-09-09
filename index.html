@@ -1302,7 +1302,55 @@ function search(q, filters = {}){
 }
 function hl(t,q){var o=esc(t);var qs=(q||'').toLowerCase().split(/\s+/).filter(Boolean);qs.forEach(function(k){if(!k)return;var re=new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi');o=o.replace(re,function(m){return '<mark>'+m+'</mark>';});});return o;}
 var SUG_CUR=-1,SUG_ITEMS=[];
-" data-id="'+r.id+'"><div class="s-t"><span class="'+dc+'">'+dn+'</span> '+r.id+'. '+hl(r.title,q)+'</div><div class="s-d">'+esc(r.sec)+' · '+hl(r.snip,q)+'</div></div>';});box.innerHTML=html;box.classList.add('on');Array.prototype.forEach.call(box.querySelectorAll('.s-item[data-id]'),function(el){el.addEventListener('click',function(){var id=el.getAttribute('data-id');document.getElementById('q').value='';renderSuggest('');if(id)goProb(id);});});}
+function renderSuggest(q, customRes = null){
+  var box=document.getElementById('suggest');
+  if(!q && !customRes){
+    box.classList.remove('on');
+    box.innerHTML='';
+    SUG_ITEMS=[];
+    SUG_CUR=-1;
+    return;
+  }
+
+  var res = customRes || search(q);
+  SUG_ITEMS=res;
+  SUG_CUR=-1;
+
+  var html='';
+
+  // 添加搜索历史
+  if(q){
+    var historyHtml = renderSearchHistory();
+    if(historyHtml) html += historyHtml;
+  }
+
+  if(!res.length){
+    html+='<div class="s-item" style="color:var(--muted);cursor:default">无匹配结果</div>';
+  } else {
+    res.forEach(function(r,i){
+      var dn=diffName(r.d),dc=diffCls(r.d);
+      html+='<div class="s-item" data-i="'+i+'" data-id="'+r.id+'">'
+        +'<div class="s-t"><span class="'+dc+'">'+dn+'</span> '+r.id+'. '+hl(r.title,q)+'</div>'
+        +'<div class="s-d">'+esc(r.sec)+' · '+hl(r.snip,q)+'</div>'
+        +'</div>';
+    });
+  }
+
+  box.innerHTML=html;
+  box.classList.add('on');
+
+  Array.prototype.forEach.call(box.querySelectorAll('.s-item[data-id]'),function(el){
+    el.addEventListener('click',function(){
+      var id=el.getAttribute('data-id');
+      if(id){
+        document.getElementById('q').value='';
+        renderSuggest('');
+        addSearchHistory(el.querySelector('.s-t').textContent.replace(/\[简单\]\s*/,'').replace(/\[中等\]\s*/,'').replace(/\[困难\]\s*/,''));
+        goProb(id);
+      }
+    });
+  });
+}
 function sugMove(d){if(!SUG_ITEMS.length)return;SUG_CUR=(SUG_CUR+d+SUG_ITEMS.length)%SUG_ITEMS.length;var items=document.getElementById('suggest').querySelectorAll('.s-item[data-id]');Array.prototype.forEach.call(items,function(el,i){el.classList.toggle('active',i===SUG_CUR);});if(items[SUG_CUR])items[SUG_CUR].scrollIntoView({block:'nearest'});}
 // 搜索历史功能
 function getSearchHistory() {
